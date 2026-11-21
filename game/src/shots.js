@@ -1,79 +1,115 @@
-// The screenshot scenes behind ?shot=start|play|end. Each one plays the real rules forward from a
-// fresh world for a fixed number of steps, steered by a simple autopilot (look ahead each way the
-// paddle could move, keep clear of blocks, chase the lowest coin when that is safe), so the frame
-// is what a short game really looks like and the same seed always gives the same frame.
-import { FIELD, PLAYER, STEP } from './config.js';
-import { EVENT_OVER, KIND_BLOCK } from './world.js';
-import { SCREEN_OVER, SCREEN_PLAY, SCREEN_TITLE } from './render.js';
+// The screenshot scenes behind ?shot=chase|city|heist|start. Each one sets the
+// world to a real, playable state — a chase, a street, a heist, the title —
+// and returns the screen to draw over it. The frame is what the game really
+// looks like in that state, and the same seed always gives the same frame.
+// The cover is the chase: a wanted level, police cars, a helicopter, the
+// minimap and a mission objective, all in one picture.
 
-const START_SECONDS = 5;
-const PLAY_SECONDS = 26;
-const END_LIMIT_SECONDS = 600;
-/**
- * How far ahead, in seconds, the autopilot checks each way it could move: the play scene's pilot
- * looks well ahead and keeps all its lives; the end scene's looks only a moment ahead, so it is
- * caught out once the blocks speed up, as a hurried player is.
- */
-const HORIZON_PLAY = 0.7;
-const HORIZON_END = 0.25;
-const SAMPLE = 1 / 30;
-const DIRECTIONS = [0, -1, 1];
-/** Extra room, each side, it keeps between the paddle and a block. */
-const MARGIN = 10;
+import { SCREEN_PLAY, SCREEN_TITLE } from './render.js';
+import { addWanted, enterCar } from './world.js';
 
-/** Seconds until moving in `direction` (-1, 0, 1) runs the paddle into a block; Infinity when it never does. */
-function timeToHit(state, direction, horizon) {
-  const player = state.player;
-  for (let t = SAMPLE; t <= horizon; t += SAMPLE) {
-    const x = Math.min(FIELD.width - player.width, Math.max(0, player.x + direction * PLAYER.speed * t));
-    for (let index = 0; index < state.items.length; index += 1) {
-      const item = state.items[index];
-      if (!item.active || item.kind !== KIND_BLOCK) continue;
-      const y = item.y + item.speed * t;
-      if (y + item.height > player.y && y < player.y + player.height && item.x < x + player.width + MARGIN && item.x + item.width > x - MARGIN) return t;
-    }
-  }
-  return Infinity;
+// A police car placed by hand for a shot: same shape as the world's cars.
+function policeCar(id, x, y, angle, speed) {
+  return {
+    id, x, y, angle, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed,
+    speed, kind: 'police', color: '#2e4a7a', isPolice: true,
+    health: 100, isPlayer: false, isTraffic: false, driver: false,
+    stuck: 0, smoke: 0, wrecked: false,
+  };
 }
 
-/** Of the safe ways to move, the one toward the lowest coin (or the centre); else the one that is hit last. */
-function autopilot(state, horizon) {
-  const player = state.player;
-  let coin = null;
-  for (let index = 0; index < state.items.length; index += 1) {
-    const item = state.items[index];
-    if (item.active && item.kind !== KIND_BLOCK && (coin === null || item.y > coin.y)) coin = item;
+// Put Mara in the red sports car by the garage, without the theft wanted bump.
+function putMaraInSportsCar(world) {
+  const car = world.cars.find((c) => c.id === 1000);
+  if (!car) return null;
+  car.driver = false;
+  enterCar(world, car);
+  return car;
+}
+
+// The wanted level, set exactly, with the helicopter to match.
+function setWanted(world, stars) {
+  world.wanted.stars = stars;
+  world.wanted.timer = 0;
+  world.wanted.cooling = false;
+  world.stats.maxWanted = Math.max(world.stats.maxWanted, stars);
+  if (stars >= 3) {
+    world.heli.active = true;
+    world.heli.x = world.player.x;
+    world.heli.y = world.player.y - 420;
   }
-  const target = coin === null ? FIELD.width / 2 : coin.x + coin.width / 2;
-  const centre = player.x + player.width / 2;
-  const wanted = target > centre + 8 ? 1 : target < centre - 8 ? -1 : 0;
-  let best = wanted;
-  let bestTime = timeToHit(state, wanted, horizon);
-  for (let index = 0; index < DIRECTIONS.length && bestTime !== Infinity; index += 1) {
-    const time = timeToHit(state, DIRECTIONS[index], horizon);
-    if (time > bestTime) {
-      bestTime = time;
-      best = DIRECTIONS[index];
-    }
-  }
-  return best;
+}
+
+function setMission(world, index, step, objective, target) {
+  world.mission.index = index;
+  world.mission.step = step;
+  world.mission.started = true;
+  world.mission.objective = objective;
+  world.mission.target = target;
 }
 
 /**
- * Set `world` to the named scene (start, play or end; any other name is start) and return the
- * screen to draw over it and the best score to show.
+ * Set `world` to the named scene and return the screen to draw and the best
+ * cash to show. Any other name is the title.
  */
 export function stageShot(name, world) {
-  world.reset();
-  if (name !== 'play' && name !== 'end') {
-    for (let index = 0; index < START_SECONDS / STEP; index += 1) world.step(STEP, 0, true);
-    return { screen: SCREEN_TITLE, best: 0 };
+  const s = world.city.spots;
+  if (name === 'chase') {
+    // The cover: Mara in the sports car, fleeing right along the Neon Mile,
+    // three stars, two police cars on her tail on the same road, the
+    // helicopter ahead of her, and the escape objective on the HUD.
+    const car = putMaraInSportsCar(world);
+    if (car) {
+      car.x = 1400;
+      car.y = 1600;
+      car.angle = 0;
+      car.speed = 420;
+      world.player.x = car.x;
+      world.player.y = car.y;
+      world.player.angle = car.angle;
+      world.player.speed = 420;
+    }
+    setWanted(world, 3);
+    world.heli.x = 1600;
+    world.heli.y = 1330;
+    world.cars.push(policeCar(3001, 1150, 1600, 0, 430));
+    world.cars.push(policeCar(3002, 1050, 1600, 0, 400));
+    setMission(world, 3, 2, 'The Big One: Escape to the safehouse — lose the cops!', { x: s.safehouse.x, y: s.safehouse.y, label: 'Safehouse' });
+    world.camera.x = world.player.x;
+    world.camera.y = world.player.y;
+    world.camera.zoom = 0.9;
+    return { screen: SCREEN_PLAY, best: 0 };
   }
-  const limit = name === 'end' ? END_LIMIT_SECONDS : PLAY_SECONDS;
-  const horizon = name === 'end' ? HORIZON_END : HORIZON_PLAY;
-  for (let index = 0; index < limit / STEP; index += 1) {
-    if (world.step(STEP, autopilot(world.state, horizon), false) & EVENT_OVER) break;
+  if (name === 'city') {
+    // Mara on foot in Palmera Heights, traffic and pedestrians around her.
+    world.player.x = 1400;
+    world.player.y = 800;
+    world.player.angle = 0;
+    world.player.onFoot = true;
+    setWanted(world, 0);
+    setMission(world, 0, 1, 'Wheels: Drive the car to the Marina pickup', { x: s.marinaPickup.x, y: s.marinaPickup.y, label: 'Marina' });
+    world.camera.x = world.player.x;
+    world.camera.y = world.player.y;
+    world.camera.zoom = 1;
+    return { screen: SCREEN_PLAY, best: 0 };
   }
-  const over = world.state.lives === 0;
-  return { screen: over ? SCREEN_OVER : SCREEN_PLAY, best: world.state.score };
+  if (name === 'heist') {
+    // Mara on foot outside the Golden Palm, two stars, a police car closing in.
+    world.player.x = 1400;
+    world.player.y = 1990;
+    world.player.angle = -Math.PI / 2;
+    world.player.onFoot = true;
+    setWanted(world, 2);
+    world.cars.push(policeCar(3003, 1200, 1800, 0, 380));
+    setMission(world, 3, 1, 'The Big One: Grab the vault cash', { x: s.neonCasino.x, y: s.neonCasino.y, label: 'Golden Palm' });
+    world.camera.x = world.player.x;
+    world.camera.y = world.player.y;
+    world.camera.zoom = 1;
+    return { screen: SCREEN_PLAY, best: 0 };
+  }
+  // The title screen, over the city.
+  world.camera.x = 1600;
+  world.camera.y = 1200;
+  world.camera.zoom = 0.55;
+  return { screen: SCREEN_TITLE, best: 0 };
 }
