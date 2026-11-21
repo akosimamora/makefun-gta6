@@ -1,57 +1,34 @@
-// The story: Mara Voss, a wheelwoman fresh out of the Marina, takes four
-// jobs from the fixer Elias Kross. Each mission is a target point plus a
-// condition; finishing one unlocks the next and turns its district gold
-// on the minimap.
-export const MISSIONS = [
+// Four chained jobs: Mara Voss against fixer Elias Kross. Each job hands
+// its cash to the next and raises the heat.
+window.SOL = window.SOL || {};
+SOL.missionList = [
   {
-    id: 'wheels',
-    title: 'Wheels',
-    brief: 'Kross needs a driver. Steal a car, then bring it to the Marina pickup.',
-    target: { x: 2720, y: 480 },
-    targetLabel: 'Marina pickup',
-    district: 'marina',
-    needsCar: true,
-    cash: 250,
+    id: 'wheels', title: 'Wheels',
+    brief: 'Elias Kross owns this town. Steal a car and reach the Marina pickup.',
+    objective: 'Steal a car (E), then drive to the Marina pickup',
+    target: { x: 1400, y: 200, r: 90, label: 'Marina pickup' },
+    needCar: true, cash: 250,
   },
   {
-    id: 'vault',
-    title: 'Grab the vault cash',
-    brief: 'The Golden Palm counts its take at midnight. Walk in, grab the bag, walk out.',
-    target: { x: 640, y: 1920 },
-    targetLabel: 'Golden Palm vault',
-    district: 'golden',
-    needsCar: false,
-    cash: 600,
+    id: 'vault', title: 'The Vault',
+    brief: 'The Golden Palm counts its take at midnight. Grab the vault cash.',
+    objective: 'Reach the Golden Palm and grab the vault cash',
+    target: { x: 1000, y: 1800, r: 110, label: 'Golden Palm vault' },
+    needCar: false, cash: 1200,
   },
   {
-    id: 'bigone',
-    title: 'The Big One',
-    brief: 'Kross set you up. The cops are coming — lose them and reach the Docks safehouse.',
-    target: { x: 2560, y: 1920 },
-    targetLabel: 'Docks safehouse',
-    district: 'docks',
-    needsCar: false,
-    cash: 1200,
-    heat: 3,
+    id: 'drop', title: 'The Drop',
+    brief: 'Cops are circling. Carry the cash across town to the safehouse.',
+    objective: 'Deliver the cash to the Safehouse',
+    target: { x: 2600, y: 2200, r: 100, label: 'Safehouse' },
+    needCar: false, cash: 800,
   },
   {
-    id: 'kross',
-    title: 'Settle with Kross',
-    brief: 'One last drive to Sol Tower. End it with Elias Kross, face to face.',
-    target: { x: 1600, y: 1200 },
-    targetLabel: 'Sol Tower',
-    district: 'downtown',
-    needsCar: false,
-    cash: 2500,
+    id: 'bigone', title: 'The Big One',
+    brief: 'One last score, then vanish. Lose the cops and reach the safehouse.',
+    objective: 'Escape to the safehouse — lose the cops!',
+    target: { x: 2600, y: 2200, r: 100, label: 'Safehouse' },
+    needCar: false, cash: 5000, loseCops: true,
   },
 ];
-
-export function missionAt(index) {
-  return MISSIONS[index] ?? null;
-}
-
-export function getawayLabel(wanted, damageTaken) {
-  if (wanted === 0 && damageTaken === 0) return 'CLEAN';
-  if (wanted <= 2 && damageTaken < 40) return 'MESSY';
-  return 'CHAOS';
-}
+SOL.missionAt = function (index) { return SOL.missionList[Math.min(index, SOL.missionList.length - 1)]; };

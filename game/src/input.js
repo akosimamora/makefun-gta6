@@ -1,56 +1,29 @@
-// Keyboard and mouse input. Tracks held keys, a click-to-shoot aim point,
-// and edge-triggered presses (Enter to start, E to steal a car, R reload).
-export function createInput(canvas) {
-  const keys = new Set();
-  const pressed = new Set();
-  let mouseX = 0;
-  let mouseY = 0;
-  let mouseDown = false;
-  let mouseClicked = false;
-
-  function keyName(e) {
-    return e.key.length === 1 ? e.key.toLowerCase() : e.key;
-  }
-
-  window.addEventListener('keydown', (e) => {
-    const k = keyName(e);
-    if (!keys.has(k)) pressed.add(k);
-    keys.add(k);
-    if ([' ', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) e.preventDefault();
-  });
-  window.addEventListener('keyup', (e) => keys.delete(keyName(e)));
-  window.addEventListener('blur', () => keys.clear());
-
-  canvas.addEventListener('mousemove', (e) => {
-    const r = canvas.getBoundingClientRect();
-    mouseX = e.clientX - r.left;
-    mouseY = e.clientY - r.top;
-  });
-  canvas.addEventListener('mousedown', (e) => {
-    mouseDown = true;
-    mouseClicked = true;
-    const r = canvas.getBoundingClientRect();
-    mouseX = e.clientX - r.left;
-    mouseY = e.clientY - r.top;
-  });
-  window.addEventListener('mouseup', () => { mouseDown = false; });
-
-  return {
-    keys,
-    get mouse() { return { x: mouseX, y: mouseY, down: mouseDown, clicked: mouseClicked }; },
-    axis() {
-      let x = 0;
-      let y = 0;
-      if (keys.has('a') || keys.has('ArrowLeft')) x -= 1;
-      if (keys.has('d') || keys.has('ArrowRight')) x += 1;
-      if (keys.has('w') || keys.has('ArrowUp')) y -= 1;
-      if (keys.has('s') || keys.has('ArrowDown')) y += 1;
-      return { x, y };
-    },
-    wasPressed(k) { return pressed.has(k); },
-    endFrame() {
-      pressed.clear();
-      mouseClicked = false;
-    },
-  };
-}
+// Keyboard + mouse, with edge-triggered presses the game loop consumes.
+window.SOL = window.SOL || {};
+SOL.input = {
+  keys: {},
+  pressed: {},
+  mouse: { x: 0, y: 0, down: false, clicked: false },
+  attach(canvas) {
+    window.addEventListener('keydown', (e) => {
+      if (!this.keys[e.code]) this.pressed[e.code] = true;
+      this.keys[e.code] = true;
+      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) e.preventDefault();
+    });
+    window.addEventListener('keyup', (e) => { this.keys[e.code] = false; });
+    canvas.addEventListener('mousemove', (e) => {
+      const r = canvas.getBoundingClientRect();
+      this.mouse.x = e.clientX - r.left;
+      this.mouse.y = e.clientY - r.top;
+    });
+    canvas.addEventListener('mousedown', (e) => {
+      if (e.button === 0) { this.mouse.down = true; this.mouse.clicked = true; }
+    });
+    window.addEventListener('mouseup', () => { this.mouse.down = false; });
+    window.addEventListener('blur', () => { this.keys = {}; this.mouse.down = false; });
+  },
+  down(code) { return !!this.keys[code]; },
+  hit(code) { const v = !!this.pressed[code]; delete this.pressed[code]; return v; },
+  click() { const v = this.mouse.clicked; this.mouse.clicked = false; return v; },
+  endFrame() { this.pressed = {}; this.mouse.clicked = false; },
+};

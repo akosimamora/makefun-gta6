@@ -4,17 +4,13 @@
 [![rank](https://make.fun/badge/gta6-01/akosimamora/makefun-gta6/rank.svg)](https://make.fun/bounty/gta6-01/leaderboard?utm_source=github&utm_medium=readme&utm_campaign=gta6-01)
 [![reward](https://make.fun/badge/gta6-01/akosimamora/makefun-gta6/reward.svg)](https://make.fun/bounty/gta6-01?utm_source=github&utm_medium=readme&utm_campaign=gta6-01)
 
-An open-world crime game set in Solmara, a sun-soaked coastal city with five districts. You are Mara Voss, a wheelwoman who takes four jobs from the fixer Elias Kross: steal a car and bring it to the Marina, grab the Golden Palm's vault cash, lose a three-star police chase on the way to the Docks safehouse, and finally settle things with Kross himself at Sol Tower.
+Solmara is a top-down open-world crime game: Mara Voss comes home to take her coastal city back from fixer Elias Kross. Walk the streets or steal a car, outrun the Solmara PD through five districts, and run four chained jobs — Wheels, The Vault, The Drop and The Big One — while the wanted level climbs from one star to five, patrol cars ram you and a helicopter pins you in its spotlight.
 
-## How it plays
+What is in the game: a 3200×2400 city with five named districts, AI traffic (22 cars) and pedestrians (28), foot cops and patrol cars that chase by wanted level, a helicopter from 3 stars, pistol combat with ammo and reload, district reputation that turns gold on the live minimap, getaway ratings (CLEAN / MESSY / CHAOS), a HUD with cash, wanted stars, ammo, health and a CAR speed panel, start / pause / busted / wasted / done screens, a localStorage save of best cash and jobs done, and synthesized WebAudio sounds (shots, sirens, pickups, crashes) with no audio files.
 
-- **On foot or by car** — walk the streets with WASD, press E near any car to steal it, then drive with the same keys.
-- **Traffic and pedestrians** — 22 AI cars cruise the road grid and 28 pedestrians walk the sidewalks.
-- **Wanted level** — stealing cars and firing your pistol raises the heat from 0 to 5 stars. Foot cops come first, patrol cars join at two stars, and a police helicopter with a spotlight hunts you from three stars up.
-- **Combat** — click or press Space to shoot (12 rounds, R reloads).
-- **Missions and story** — four chained jobs with a gold target pillar on the map; finishing a job turns its district gold on the minimap and rates your getaway CLEAN, MESSY or CHAOS.
-- **HUD and minimap** — cash, jobs done, health, ammo, a live minimap with the mission marker and police blips, and a CAR panel with speed and car health while driving.
-- **Save** — best cash and jobs done persist in localStorage; WebAudio synth sounds throughout (M mutes).
+## Controls
+
+WASD / arrows — move and drive · E — steal a car / get out · Click / Space — shoot · R — reload · P — pause · Enter — start / retry
 
 ## Run it
 
@@ -23,7 +19,7 @@ mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
 # writes out/dossier.json plus the game and screenshots
 ```
 
-Serve `game/` over any static server for the playable build (for example `npx serve game`), or open `game/index.html` through a local server. Node 22, standard library only, no network. Screenshot scenes are staged with `?shot=chase|city|heist|start`.
+`main.ts` runs on Node 22, standard library only, no network. It resolves paths against its own directory, never the working directory, and writes byte-identical output on every run. Open `game/index.html` in a browser to play (or `node serve.ts` for a local static server).
 
 ---
 
