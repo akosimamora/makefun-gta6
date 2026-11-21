@@ -1,273 +1,269 @@
-// World state and simulation: player, traffic, pedestrians, police,
-// helicopter, bullets, wanted level, missions, getaway rating.
-import { CONFIG } from './config.js';
-import { mulberry32, range, intRange, pick } from './random.js';
-import { buildCity, districtAt, onRoad } from './city.js';
-import { missionFor, rateGetaway } from './missions.js';
+// The living city: player, traffic, pedestrians, police and the helicopter.
+import {
+  WORLD_W, WORLD_H, TRAFFIC_CARS, PEDESTRIANS, MAX_WANTED,
+  PISTOL_AMMO, PLAYER_HP, WALK_SPEED, CAR_ACCEL, CAR_TOP_SPEED,
+  CAR_BRAKE, CAR_TURN, RELOAD_MS, SHOT_COOLDOWN_MS,
+} from './config.js';
+import { nearestRoadX, nearestRoadY } from './city.js';
 
-const CAR_COLORS = ['#c0392b', '#2980b9', '#f1c40f', '#7f8c8d', '#e67e22', '#8e44ad', '#16a085'];
+const CAR_COLORS = ['#c0392b', '#2980b9', '#f1c40f', '#ecf0f1', '#2c3e50', '#8e44ad', '#e67e22'];
+const PED_COLORS = ['#e74c3c', '#3498db', '#2ecc71', '#f39c12', '#9b59b6', '#1abc9c'];
 
-export class World {
-  constructor(save, audio) {
-    this.city = buildCity();
-    this.audio = audio;
-    this.save = save;
-    this.rng = mulberry32(777);
-    this.player = {
-      x: this.city.spawn.x, y: this.city.spawn.y, angle: -Math.PI / 2,
-      hp: CONFIG.playerHp, ammo: CONFIG.pistolAmmo, onFoot: true, car: null,
-      speed: 0, moving: false,
-    };
-    this.cars = this.city.carSpawns.map((s, i) => ({
-      x: s.x, y: s.y, angle: (i % 2 ? 0 : Math.PI / 2), color: CAR_COLORS[i % CAR_COLORS.length],
-      parked: true, speed: 0, driver: false,
-    }));
-    this.traffic = [];
-    for (let i = 0; i < CONFIG.trafficCount; i++) this.traffic.push(this.spawnTrafficCar());
-    this.peds = [];
-    for (let i = 0; i < CONFIG.pedCount; i++) this.peds.push(this.spawnPed());
-    this.cops = [];
-    this.heli = { x: 0, y: 0, active: false, angle: 0 };
-    this.bullets = [];
-    this.wanted = 0;
-    this.wantedPeak = 0;
-    this.wantedTimer = 0;
-    this.tookDamage = false;
-    this.missionIndex = save.jobsDone;
-    this.mission = this.missionIndex < 4 ? missionFor(this.missionIndex) : null;
-    this.missionDone = false;
-    this.message = this.mission ? `${this.mission.giver}: ${this.mission.text}` : 'All jobs done. Solmara is yours.';
-    this.messageTimer = 6;
-    this.cashFlash = 0;
-    this.frozen = false;
-    this.time = 0;
+export function createWorld(city, rng) {
+  const cars = [];
+  for (let i = 0; i < TRAFFIC_CARS; i++) {
+    const vertical = rng.chance(0.5);
+    cars.push({
+      x: vertical ? nearestRoadX(rng.range(200, WORLD_W - 200)) : rng.range(200, WORLD_W - 200),
+      y: vertical ? rng.range(200, WORLD_H - 200) : nearestRoadY(rng.range(200, WORLD_H - 200)),
+      angle: vertical ? (rng.chance(0.5) ? Math.PI / 2 : -Math.PI / 2) : (rng.chance(0.5) ? 0 : Math.PI),
+      speed: rng.range(120, 220),
+      color: rng.pick(CAR_COLORS),
+      traffic: true,
+      vertical,
+    });
   }
-
-  spawnTrafficCar() {
-    const vertical = this.rng() < 0.5;
-    const road = pick(this.rng, this.city.roads.filter((r) => r.vertical === vertical));
-    const along = range(this.rng, 100, vertical ? CONFIG.worldH - 100 : CONFIG.worldW - 100);
-    return {
-      x: vertical ? road.x1 + (this.rng() < 0.5 ? -14 : 14) : along,
-      y: vertical ? along : road.y1 + (this.rng() < 0.5 ? -14 : 14),
-      angle: vertical ? (this.rng() < 0.5 ? Math.PI / 2 : -Math.PI / 2) : (this.rng() < 0.5 ? 0 : Math.PI),
-      color: pick(this.rng, CAR_COLORS),
-      speed: range(this.rng, 110, 190),
-    };
+  // A few parked cars the player can steal.
+  for (let i = 0; i < 6; i++) {
+    cars.push({
+      x: rng.range(300, WORLD_W - 300),
+      y: nearestRoadY(rng.range(300, WORLD_H - 300)),
+      angle: rng.chance(0.5) ? 0 : Math.PI,
+      speed: 0,
+      color: rng.pick(CAR_COLORS),
+      traffic: false,
+      vertical: false,
+    });
   }
-
-  spawnPed() {
-    return {
-      x: range(this.rng, 260, CONFIG.worldW - 60),
-      y: range(this.rng, 60, CONFIG.worldH - 60),
-      angle: range(this.rng, 0, Math.PI * 2),
-      speed: range(this.rng, 22, 48),
-      color: pick(this.rng, ['#ecf0f1', '#f39c12', '#1abc9c', '#e74c3c', '#9b59b6']),
-      turnIn: range(this.rng, 2, 6),
-    };
+  const peds = [];
+  for (let i = 0; i < PEDESTRIANS; i++) {
+    peds.push({
+      x: rng.range(150, WORLD_W - 150),
+      y: rng.range(150, WORLD_H - 150),
+      angle: rng.range(0, Math.PI * 2),
+      speed: rng.range(30, 70),
+      color: rng.pick(PED_COLORS),
+      turnIn: rng.range(1, 4),
+    });
   }
+  return {
+    player: {
+      x: 600, y: 900, angle: 0, speed: 0, onFoot: true, car: null,
+      hp: PLAYER_HP, ammo: PISTOL_AMMO, wanted: 0, cash: 0,
+      reloadUntil: 0, lastShot: 0, aim: 0,
+    },
+    cars, peds,
+    cops: [], copCars: [],
+    heli: { x: 600, y: 900, active: false },
+    shots: [],
+    wantedPeak: 0, shotsFired: 0,
+    busted: false, wasted: false,
+    time: 0, crimeTimer: 0,
+  };
+}
 
-  addWanted(n) {
-    this.wanted = Math.min(CONFIG.maxWanted, this.wanted + n);
-    this.wantedPeak = Math.max(this.wantedPeak, this.wanted);
-    this.wantedTimer = CONFIG.wantedDecayMs / 1000;
-    if (this.wanted >= 1 && this.cops.length === 0) this.spawnCops();
-  }
+function clamp(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
+function dist(ax, ay, bx, by) { const dx = ax - bx, dy = ay - by; return Math.sqrt(dx * dx + dy * dy); }
 
-  spawnCops() {
-    const p = this.player;
-    for (let i = 0; i < CONFIG.copFootCount; i++) {
-      this.cops.push({ kind: 'foot', x: p.x + (i - 1) * 160, y: p.y - 260, speed: 210, hp: 60 });
+export function addWanted(world, n) {
+  const p = world.player;
+  p.wanted = clamp(p.wanted + n, 0, MAX_WANTED);
+  if (p.wanted > world.wantedPeak) world.wantedPeak = p.wanted;
+  world.crimeTimer = 0;
+}
+
+export function updateWorld(world, input, dt, audio, view) {
+  const p = world.player;
+  if (world.busted || world.wasted) return;
+  world.time += dt;
+
+  // Wanted slowly cools off when the player stays clean.
+  world.crimeTimer += dt;
+  if (world.crimeTimer > 14 && p.wanted > 0) { p.wanted -= 1; world.crimeTimer = 0; }
+
+  // Aim at the mouse.
+  const wx = view.x + input.mouse.x;
+  const wy = view.y + input.mouse.y;
+  p.aim = Math.atan2(wy - p.y, wx - p.x);
+
+  if (p.onFoot) {
+    let mx = 0, my = 0;
+    if (input.down('KeyW') || input.down('ArrowUp')) my -= 1;
+    if (input.down('KeyS') || input.down('ArrowDown')) my += 1;
+    if (input.down('KeyA') || input.down('ArrowLeft')) mx -= 1;
+    if (input.down('KeyD') || input.down('ArrowRight')) mx += 1;
+    if (mx || my) {
+      const len = Math.hypot(mx, my);
+      p.x = clamp(p.x + (mx / len) * WALK_SPEED * dt, 20, WORLD_W - 20);
+      p.y = clamp(p.y + (my / len) * WALK_SPEED * dt, 20, WORLD_H - 20);
+      p.angle = Math.atan2(my, mx);
     }
-    for (let i = 0; i < CONFIG.copCarCount; i++) {
-      this.cops.push({ kind: 'car', x: p.x + (i - 1) * 320, y: p.y + 320, angle: 0, speed: 0, color: '#2c3e50' });
-    }
-  }
-
-  nearestCar(maxDist) {
-    let best = null;
-    let bestD = maxDist;
-    for (const c of this.cars) {
-      if (c.driver) continue;
-      const d = Math.hypot(c.x - this.player.x, c.y - this.player.y);
-      if (d < bestD) { bestD = d; best = c; }
-    }
-    return best;
-  }
-
-  enterCar(car) {
-    car.parked = false;
-    car.driver = true;
-    this.player.car = car;
-    this.player.onFoot = false;
-    this.addWanted(CONFIG.stealWanted);
-    this.audio.pickup();
-  }
-
-  exitCar() {
-    const car = this.player.car;
-    if (!car) return;
-    car.driver = false;
-    car.parked = true;
-    this.player.x = car.x + 34;
-    this.player.y = car.y;
-    this.player.car = null;
-    this.player.onFoot = true;
-  }
-
-  shoot() {
-    const p = this.player;
-    if (p.ammo <= 0) { this.audio.reload(); return; }
-    p.ammo -= 1;
-    const a = p.angle;
-    this.bullets.push({ x: p.x + Math.cos(a) * 26, y: p.y + Math.sin(a) * 26, vx: Math.cos(a) * 720, vy: Math.sin(a) * 720, life: 0.7 });
-    this.audio.shoot();
-    this.addWanted(CONFIG.shotWanted);
-  }
-
-  reload() {
-    this.player.ammo = CONFIG.pistolAmmo;
-    this.audio.reload();
-  }
-
-  finishMission() {
-    const m = this.mission;
-    if (!m) return;
-    const rating = rateGetaway(this.wantedPeak, this.tookDamage);
-    this.save.cash += m.payout;
-    this.save.jobsDone += 1;
-    const d = districtAt(m.target.x, m.target.y);
-    this.save.rep[d.id] = true;
-    if (!this.save.bestGetaway || rating === 'CLEAN') this.save.bestGetaway = rating;
-    this.message = `Job done — ${m.title}: $${m.payout.toLocaleString()} · getaway ${rating}`;
-    this.messageTimer = 6;
-    this.cashFlash = 2;
-    this.audio.cash();
-    this.missionIndex += 1;
-    this.mission = this.missionIndex < 4 ? missionFor(this.missionIndex) : null;
-    this.missionDone = true;
-    this.wantedPeak = 0;
-    this.tookDamage = false;
-  }
-
-  update(dt, input) {
-    if (this.frozen) return;
-    this.time += dt;
-    const p = this.player;
-    const ax = input.axis();
-    p.moving = ax.x !== 0 || ax.y !== 0;
-    // aim: mouse in screen space is converted by main.js into world angle
-    if (input.consumeClick() || input.pressed('Space')) {
-      if (p.onFoot) this.shoot();
-    }
-    if (input.consumePressed('KeyR')) this.reload();
+    // Steal a nearby car.
     if (input.consumePressed('KeyE')) {
-      if (p.onFoot) {
-        const car = this.nearestCar(70);
-        if (car) this.enterCar(car);
-      } else {
-        this.exitCar();
+      const car = nearestCar(world, p.x, p.y, 70);
+      if (car) {
+        car.traffic = false;
+        p.car = car;
+        p.onFoot = false;
+        p.speed = 0;
+        p.x = car.x; p.y = car.y; p.angle = car.angle;
+        addWanted(world, 1);
+        audio.pickup();
       }
     }
-
-    if (p.onFoot) {
-      const len = Math.hypot(ax.x, ax.y) || 1;
-      p.x += (ax.x / len) * CONFIG.walkSpeed * dt * (p.moving ? 1 : 0);
-      p.y += (ax.y / len) * CONFIG.walkSpeed * dt * (p.moving ? 1 : 0);
-      if (p.moving) p.angle = Math.atan2(ax.y, ax.x);
-    } else if (p.car) {
-      const car = p.car;
-      const fwd = ax.y < 0 ? 1 : ax.y > 0 ? -0.4 : 0;
-      car.speed += fwd * CONFIG.carAccel * dt;
-      car.speed *= Math.pow(0.4, dt);
-      if (Math.abs(car.speed) < 4) car.speed = 0;
-      car.speed = Math.max(-CONFIG.carReverse, Math.min(CONFIG.carSpeed, car.speed));
-      car.angle += ax.x * (car.speed / CONFIG.carSpeed) * 2.4 * dt;
-      car.x += Math.cos(car.angle) * car.speed * dt;
-      car.y += Math.sin(car.angle) * car.speed * dt;
-      p.x = car.x;
-      p.y = car.y;
-      p.angle = car.angle;
-      p.speed = Math.abs(car.speed) * 0.36;
-      if (Math.abs(car.speed) > 300 && this.rng() < dt * 0.4) this.audio.siren();
-    }
-    p.x = Math.max(100, Math.min(CONFIG.worldW - 20, p.x));
-    p.y = Math.max(20, Math.min(CONFIG.worldH - 20, p.y));
-
-    // traffic: cruise along roads, wrap around the city edge
-    for (const t of this.traffic) {
-      t.x += Math.cos(t.angle) * t.speed * dt;
-      t.y += Math.sin(t.angle) * t.speed * dt;
-      if (t.x < -40) t.x = CONFIG.worldW + 40;
-      if (t.x > CONFIG.worldW + 40) t.x = -40;
-      if (t.y < -40) t.y = CONFIG.worldH + 40;
-      if (t.y > CONFIG.worldH + 40) t.y = -40;
-    }
-    // pedestrians: wander, turn sometimes
-    for (const pd of this.peds) {
-      pd.turnIn -= dt;
-      if (pd.turnIn <= 0) { pd.angle = range(this.rng, 0, Math.PI * 2); pd.turnIn = range(this.rng, 2, 6); }
-      pd.x += Math.cos(pd.angle) * pd.speed * dt;
-      pd.y += Math.sin(pd.angle) * pd.speed * dt;
-      pd.x = Math.max(220, Math.min(CONFIG.worldW - 20, pd.x));
-      pd.y = Math.max(20, Math.min(CONFIG.worldH - 20, pd.y));
-      if (!p.onFoot && p.car && Math.abs(p.car.speed) > 120 && Math.hypot(pd.x - p.x, pd.y - p.y) < 30) {
-        pd.x += (pd.x - p.x) * 0.4;
-        pd.y += (pd.y - p.y) * 0.4;
-        this.addWanted(CONFIG.runoverWanted);
+    // Shoot toward the mouse.
+    const now = performance.now();
+    const click = input.consumeClick();
+    if ((input.down('Space') || click) && now - p.lastShot > SHOT_COOLDOWN_MS && now > p.reloadUntil) {
+      if (p.ammo > 0) {
+        p.ammo -= 1;
+        p.lastShot = now;
+        world.shotsFired += 1;
+        const a = click ? Math.atan2(click.y + view.y - p.y, click.x + view.x - p.x) : p.aim;
+        world.shots.push({ x: p.x + Math.cos(a) * 22, y: p.y + Math.sin(a) * 22, vx: Math.cos(a) * 900, vy: Math.sin(a) * 900, life: 0.5 });
+        addWanted(world, 1);
+        audio.shot();
       }
     }
-    // bullets
-    for (const b of this.bullets) {
-      b.x += b.vx * dt;
-      b.y += b.vy * dt;
-      b.life -= dt;
-      for (const c of this.cops) {
-        if (c.hp > 0 && Math.hypot(c.x - b.x, c.y - b.y) < 26) { c.hp -= CONFIG.pistolDamage; b.life = 0; }
+    if (input.consumePressed('KeyR') && p.ammo < PISTOL_AMMO) {
+      p.ammo = PISTOL_AMMO;
+      p.reloadUntil = now + RELOAD_MS;
+      audio.reload();
+    }
+  } else {
+    const car = p.car;
+    if (input.down('KeyW') || input.down('ArrowUp')) car.speed = Math.min(car.speed + CAR_ACCEL * dt, CAR_TOP_SPEED);
+    else if (input.down('KeyS') || input.down('ArrowDown')) car.speed = Math.max(car.speed - CAR_BRAKE * dt, -160);
+    else car.speed *= Math.pow(0.4, dt);
+    if (Math.abs(car.speed) > 20) {
+      const steer = (input.down('KeyA') || input.down('ArrowLeft') ? -1 : 0) + (input.down('KeyD') || input.down('ArrowRight') ? 1 : 0);
+      car.angle += steer * CAR_TURN * dt * (car.speed >= 0 ? 1 : -1) * Math.min(1, Math.abs(car.speed) / 200);
+    }
+    car.x = clamp(car.x + Math.cos(car.angle) * car.speed * dt, 20, WORLD_W - 20);
+    car.y = clamp(car.y + Math.sin(car.angle) * car.speed * dt, 20, WORLD_H - 20);
+    p.x = car.x; p.y = car.y; p.angle = car.angle; p.speed = car.speed;
+    if (input.consumePressed('KeyE')) {
+      p.onFoot = true;
+      p.car = null;
+      p.speed = 0;
+      p.x = car.x + Math.cos(car.angle + Math.PI / 2) * 30;
+      p.y = car.y + Math.sin(car.angle + Math.PI / 2) * 30;
+    }
+    // Ramming a traffic car at speed is a crime and a crash.
+    for (const other of world.cars) {
+      if (other === car || !other.traffic) continue;
+      if (dist(car.x, car.y, other.x, other.y) < 34 && Math.abs(car.speed) > 120) {
+        addWanted(world, 1);
+        audio.crash();
+        car.speed *= 0.4;
+        other.speed = 60;
       }
     }
-    this.bullets = this.bullets.filter((b) => b.life > 0);
-    // police: foot cops chase, cars ram, heli circles at wanted 3+
-    for (const c of this.cops) {
-      if (c.hp <= 0) continue;
-      const d = Math.hypot(p.x - c.x, p.y - c.y);
-      const a = Math.atan2(p.y - c.y, p.x - c.x);
-      if (c.kind === 'foot') {
-        c.x += Math.cos(a) * c.speed * dt;
-        c.y += Math.sin(a) * c.speed * dt;
-        if (d < 26) { p.hp -= 26 * dt; this.tookDamage = true; }
-      } else {
-        c.angle += (a - c.angle) * Math.min(1, dt * 2);
-        c.speed = Math.min(520, c.speed + 420 * dt);
-        c.x += Math.cos(c.angle) * c.speed * dt;
-        c.y += Math.sin(c.angle) * c.speed * dt;
-        if (d < 44) { p.hp -= 30 * dt; this.tookDamage = true; this.audio.crash(); }
-      }
-    }
-    this.cops = this.cops.filter((c) => c.hp > 0);
-    if (this.wanted >= CONFIG.heliAtWanted) {
-      this.heli.active = true;
-      this.heli.angle += dt * 0.9;
-      this.heli.x = p.x + Math.cos(this.heli.angle) * 190;
-      this.heli.y = p.y + Math.sin(this.heli.angle) * 190 - 90;
-    } else {
-      this.heli.active = false;
-    }
-    // wanted decays when the player stays clean
-    if (this.wanted > 0) {
-      this.wantedTimer -= dt;
-      if (this.wantedTimer <= 0) {
-        this.wanted -= 1;
-        this.wantedTimer = CONFIG.wantedDecayMs / 1000;
-        if (this.wanted === 0) this.cops = [];
-      }
-    }
-    // mission: reach the marker
-    if (this.mission) {
-      const t = this.mission.target;
-      if (Math.hypot(p.x - t.x, p.y - t.y) < 70) this.finishMission();
-    }
-    if (this.messageTimer > 0) this.messageTimer -= dt;
-    if (this.cashFlash > 0) this.cashFlash -= dt;
   }
+
+  // Bullets fly and hit cops.
+  for (let i = world.shots.length - 1; i >= 0; i--) {
+    const s = world.shots[i];
+    s.x += s.vx * dt; s.y += s.vy * dt; s.life -= dt;
+    if (s.life <= 0) { world.shots.splice(i, 1); continue; }
+    for (let j = world.cops.length - 1; j >= 0; j--) {
+      if (dist(s.x, s.y, world.cops[j].x, world.cops[j].y) < 18) {
+        world.cops.splice(j, 1);
+        world.shots.splice(i, 1);
+        break;
+      }
+    }
+  }
+
+  updateTraffic(world, dt);
+  updatePeds(world, dt);
+  updatePolice(world, dt, audio);
+}
+
+function nearestCar(world, x, y, maxD) {
+  let best = null, bestD = maxD;
+  for (const c of world.cars) {
+    const d = dist(x, y, c.x, c.y);
+    if (d < bestD) { best = c; bestD = d; }
+  }
+  return best;
+}
+
+function updateTraffic(world, dt) {
+  for (const c of world.cars) {
+    if (!c.traffic) continue;
+    c.x += Math.cos(c.angle) * c.speed * dt;
+    c.y += Math.sin(c.angle) * c.speed * dt;
+    if (c.x < 100 || c.x > WORLD_W - 100 || c.y < 100 || c.y > WORLD_H - 100) {
+      c.angle += Math.PI / 2;
+      c.x = clamp(c.x, 120, WORLD_W - 120);
+      c.y = clamp(c.y, 120, WORLD_H - 120);
+    }
+    // Keep to the road: snap onto the nearest lane.
+    if (c.vertical) c.x += (nearestRoadX(c.x) - c.x) * Math.min(1, dt * 2);
+    else c.y += (nearestRoadY(c.y) - c.y) * Math.min(1, dt * 2);
+  }
+}
+
+function updatePeds(world, dt) {
+  for (const pd of world.peds) {
+    pd.turnIn -= dt;
+    if (pd.turnIn <= 0) { pd.angle += (Math.random() - 0.5) * 2; pd.turnIn = 2 + Math.random() * 3; }
+    pd.x = clamp(pd.x + Math.cos(pd.angle) * pd.speed * dt, 40, WORLD_W - 40);
+    pd.y = clamp(pd.y + Math.sin(pd.angle) * pd.speed * dt, 40, WORLD_H - 40);
+  }
+}
+
+function updatePolice(world, dt, audio) {
+  const p = world.player;
+  const want = p.wanted;
+  const footWant = want >= 1 ? Math.min(want, 3) : 0;
+  const carWant = want >= 2 ? Math.min(want - 1, 3) : 0;
+  while (world.cops.length < footWant) {
+    const a = Math.random() * Math.PI * 2;
+    world.cops.push({ x: p.x + Math.cos(a) * 500, y: p.y + Math.sin(a) * 500, angle: 0, speed: 200 });
+  }
+  while (world.copCars.length < carWant) {
+    const a = Math.random() * Math.PI * 2;
+    world.copCars.push({ x: p.x + Math.cos(a) * 620, y: p.y + Math.sin(a) * 620, angle: 0, speed: 320, color: '#1a1a2e' });
+  }
+  if (world.cops.length > footWant) world.cops.length = footWant;
+  if (world.copCars.length > carWant) world.copCars.length = carWant;
+
+  for (const cop of world.cops) {
+    const a = Math.atan2(p.y - cop.y, p.x - cop.x);
+    cop.angle = a;
+    cop.x += Math.cos(a) * cop.speed * dt;
+    cop.y += Math.sin(a) * cop.speed * dt;
+    if (p.onFoot && dist(cop.x, cop.y, p.x, p.y) < 26) {
+      world.busted = true;
+      audio.busted();
+      audio.siren(false);
+      return;
+    }
+  }
+  for (const cc of world.copCars) {
+    const a = Math.atan2(p.y - cc.y, p.x - cc.x);
+    cc.angle = a;
+    cc.x += Math.cos(a) * cc.speed * dt;
+    cc.y += Math.sin(a) * cc.speed * dt;
+    if (dist(cc.x, cc.y, p.x, p.y) < 36) {
+      if (!p.onFoot) {
+        p.hp -= 26 * dt * 10;
+        if (p.hp <= 0) { p.hp = 0; world.wasted = true; audio.busted(); }
+      } else {
+        world.busted = true;
+        audio.busted();
+        audio.siren(false);
+        return;
+      }
+    }
+  }
+
+  world.heli.active = want >= 3;
+  if (world.heli.active) {
+    world.heli.x += (p.x - world.heli.x) * Math.min(1, dt * 1.5);
+    world.heli.y += (p.y - world.heli.y) * Math.min(1, dt * 1.5);
+  }
+  audio.siren(want >= 1);
 }

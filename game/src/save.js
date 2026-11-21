@@ -1,26 +1,19 @@
-// localStorage save: cash, jobs done, best getaway, district REP.
-const KEY = 'solmara-save-v1';
+// Best-run records kept in localStorage so progress survives a reload.
+import { SAVE_KEY } from './config.js';
 
 export function loadSave() {
   try {
-    const raw = window.localStorage.getItem(KEY);
-    if (!raw) return null;
-    const s = JSON.parse(raw);
-    if (typeof s.cash !== 'number') return null;
-    return s;
-  } catch (_e) {
-    return null;
+    const raw = localStorage.getItem(SAVE_KEY);
+    if (!raw) return { bestCash: 0, jobsDone: 0 };
+    const data = JSON.parse(raw);
+    return { bestCash: data.bestCash | 0, jobsDone: data.jobsDone | 0 };
+  } catch (e) {
+    return { bestCash: 0, jobsDone: 0 };
   }
 }
 
 export function storeSave(save) {
   try {
-    window.localStorage.setItem(KEY, JSON.stringify(save));
-  } catch (_e) {
-    // storage full or blocked: the session just does not persist
-  }
-}
-
-export function freshSave() {
-  return { cash: 0, jobsDone: 0, bestGetaway: '', rep: {} };
+    localStorage.setItem(SAVE_KEY, JSON.stringify({ bestCash: save.bestCash, jobsDone: save.jobsDone }));
+  } catch (e) { /* storage unavailable: play without saving */ }
 }

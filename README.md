@@ -4,23 +4,19 @@
 [![rank](https://make.fun/badge/gta6-01/akosimamora/makefun-gta6/rank.svg)](https://make.fun/bounty/gta6-01/leaderboard?utm_source=github&utm_medium=readme&utm_campaign=gta6-01)
 [![reward](https://make.fun/badge/gta6-01/akosimamora/makefun-gta6/reward.svg)](https://make.fun/bounty/gta6-01?utm_source=github&utm_medium=readme&utm_campaign=gta6-01)
 
-Solmara is a playable open-world crime game in the browser: a coastal city of five districts that Mara Voss, wheelwoman for hire, works on foot and behind the wheel. Steal cars, outrun the police, dodge the helicopter spotlight, and run four chained jobs for the fixer Elias Kross — from a quiet courier run in Marina Bay to the Golden Palm vault heist.
+An open-world crime game set in Solmara, a sun-soaked coastal city of five
+districts. You are Mara Voss, a getaway driver taking on fixer Elias Kross
+across four chained jobs: courier runs, a vault heist at the Golden Palm, a
+three-star getaway to the Marina safehouse, and the big one at Sol Tower.
 
-## What is in the city
+Walk the streets or steal any car you see (E), dodge traffic and pedestrians,
+and watch the wanted level: foot cops at one star, patrol cars at two, and the
+police helicopter with its spotlight at three and up. Shoot with the mouse
+(ammo 12, R reloads), lose the tail, and bank the payout. Districts you finish
+turn gold on the live minimap, and every run is rated CLEAN, MESSY or CHAOS.
 
-- **Five districts** (Palmera Heights, Marina Bay, Golden Palm, Dockside, Sol Tower) on a 3200×2400 map with a beach and water on the west edge, a grid of avenues, and a plaza under Sol Tower.
-- **On foot and by car**: walk with WASD, press E to steal the nearest car and drive it, E again to step out. Cars accelerate, turn, and reverse; traffic cruises the avenues.
-- **Living streets**: 22 traffic cars and 28 pedestrians wander the city; running one over in a stolen car raises the heat.
-- **Wanted 0–5**: stealing, shooting, and hit-and-runs raise your stars. Foot cops chase you down, patrol cars ram, and at 3 stars a helicopter circles overhead with a spotlight. Lay low and the heat decays.
-- **Combat**: click or Space to fire the pistol (12 rounds, R reloads). Cops go down, but every shot is a star.
-- **Four chained missions**: The Courier, Dockside Pickup, The Tail, and The Big One — each with a payout, a gold marker on the map, and a getaway rating (CLEAN / MESSY / CHAOS) based on how hot you ran.
-- **HUD + minimap**: cash, district name, wanted stars, HP and ammo, the current job, a live CAR panel with speed, and a minimap where finished districts turn gold with REP.
-- **Save**: cash, jobs done, best getaway, and district REP persist in localStorage.
-- **Sound**: every effect is a WebAudio synth — no audio files.
-
-## Controls
-
-WASD / arrows — move or drive · Mouse — aim · Click / Space — shoot · E — steal / exit car · R — reload · P — pause · Enter — start / retry
+The game is plain JavaScript and Canvas — no build step, no assets to
+download. Open `game/index.html` in a browser, or serve the `game/` folder.
 
 ## Run it
 
@@ -29,8 +25,24 @@ mkdir -p /tmp/solmara-out && MAKEFUN_OUTPUT_DIR=/tmp/solmara-out node main.ts
 # writes /tmp/solmara-out/dossier.json plus the game and screenshots
 ```
 
-`main.ts` runs on Node 22, standard library only, no network. It resolves the game and screenshots against its own directory, never the working directory, and writes byte-identical output on every run. Serve `game/` over HTTP (for example `python3 -m http.server`) and open `game/index.html` to play.
+## Controls
 
----
+- WASD / arrows — walk or drive
+- E — steal a nearby car / get out
+- Mouse aim, Click / Space — shoot
+- R — reload
+- P — pause, Enter — start / play again
 
-<sub>Entered on [make.fun](https://make.fun/?ref=1nmmcbpw&utm_source=github&utm_medium=readme&utm_campaign=gta6-01) · AI agents build software for cash rewards</sub>
+## Layout
+
+- `game/src/config.js` — tuning and districts
+- `game/src/random.js` — seeded RNG for the city
+- `game/src/city.js` — districts, roads, buildings, landmarks
+- `game/src/input.js` — keyboard and mouse, edge-triggered
+- `game/src/audio.js` — WebAudio synth sounds
+- `game/src/save.js` — localStorage best-run records
+- `game/src/missions.js` — the four chained jobs
+- `game/src/world.js` — player, traffic, police, wanted system
+- `game/src/render.js` — city, chase, HUD and minimap
+- `game/src/shots.js` — frozen staged scenes for screenshots
+- `game/src/main.js` — game loop and screens

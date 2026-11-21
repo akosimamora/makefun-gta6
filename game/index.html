@@ -1,17 +1,22 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>SOLMARA — A Sun-Soaked Crime Story</title>
 <style>
-  html, body { margin: 0; padding: 0; background: #0c0c18; height: 100%; overflow: hidden; }
-  body { display: flex; align-items: center; justify-content: center; }
-  canvas { display: block; width: 1280px; height: 720px; image-rendering: auto; background: #3f7a3a; }
+  html, body { margin: 0; padding: 0; background: #0b0f14; height: 100%; }
+  body { display: flex; align-items: center; justify-content: center; font-family: sans-serif; }
+  #wrap { position: relative; }
+  canvas { display: block; width: 1280px; height: 720px; background: #0b0f14; }
+  #hint { color: #888; font-size: 12px; text-align: center; padding: 6px 0; }
 </style>
 </head>
 <body>
-<canvas id="game"></canvas>
+<div id="wrap">
+  <canvas id="game"></canvas>
+  <div id="hint">WASD move / drive &nbsp;·&nbsp; E steal or exit car &nbsp;·&nbsp; Mouse aim, Click / Space shoot &nbsp;·&nbsp; R reload &nbsp;·&nbsp; P pause &nbsp;·&nbsp; Enter start</div>
+</div>
 <script type="module" src="./src/main.js"></script>
 </body>
 </html>

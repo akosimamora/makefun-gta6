@@ -1,95 +1,163 @@
-// Solmara boot: canvas, loop, screens, and the Playwright hook.
-import { CONFIG } from './config.js';
-import { Input } from './input.js';
-import { AudioSys } from './audio.js';
-import { loadSave, storeSave, freshSave } from './save.js';
-import { World } from './world.js';
-import { drawWorld } from './render.js';
-import { stageScene, unfreeze } from './shots.js';
+// Solmara entry point: wires the city, the loop and the screens together.
+import { VIEW_W, VIEW_H, WORLD_W, WORLD_H, SEED } from './config.js';
+import { makeRng } from './random.js';
+import { buildCity } from './city.js';
+import { createInput } from './input.js';
+import { createAudio } from './audio.js';
+import { loadSave, storeSave } from './save.js';
+import { createMissions, getawayRank } from './missions.js';
+import { createWorld, updateWorld } from './world.js';
+import { render } from './render.js';
+import { stageChase, stageCity, stageHeist, stageStart } from './shots.js';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
-canvas.width = CONFIG.viewW;
-canvas.height = CONFIG.viewH;
+canvas.width = VIEW_W;
+canvas.height = VIEW_H;
 
-const input = new Input();
-input.attach(canvas);
-const audio = new AudioSys();
-let save = loadSave() || freshSave();
-let world = new World(save, audio);
-let screen = 'start';
+const rng = makeRng(SEED);
+const city = buildCity(rng);
+const world = createWorld(city, rng);
+const input = createInput(canvas);
+const audio = createAudio();
+const missions = createMissions();
+const save = loadSave();
+
+let state = 'title';
 let last = performance.now();
-const cam = { x: 0, y: 0 };
+let view = { x: 0, y: 0 };
+let endReason = '';
+let endRank = '';
 
-function resetRun() {
-  save = loadSave() || freshSave();
-  world = new World(save, audio);
-  screen = 'playing';
+function clampView() {
+  view.x = Math.max(0, Math.min(WORLD_W - VIEW_W, world.player.x - VIEW_W / 2));
+  view.y = Math.max(0, Math.min(WORLD_H - VIEW_H, world.player.y - VIEW_H / 2));
 }
 
-function clampCam() {
-  cam.x = Math.max(0, Math.min(CONFIG.worldW - CONFIG.viewW, world.player.x - CONFIG.viewW / 2));
-  cam.y = Math.max(0, Math.min(CONFIG.worldH - CONFIG.viewH, world.player.y - CONFIG.viewH / 2));
+function startGame() {
+  audio.unlock();
+  state = 'playing';
+  input.clearQueue();
 }
 
-function loop(now) {
+function finishRun(reason) {
+  endReason = reason;
+  endRank = getawayRank(world.wantedPeak, world.shotsFired);
+  const p = world.player;
+  p.cash = missions.cashEarned();
+  if (p.cash > save.bestCash) save.bestCash = p.cash;
+  if (missions.jobsDone() > save.jobsDone) save.jobsDone = missions.jobsDone();
+  storeSave(save);
+  state = reason === 'done' ? 'done' : reason;
+}
+
+function drawTitle() {
+  ctx.fillStyle = '#0b0f14';
+  ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+  ctx.fillStyle = '#ffd700';
+  ctx.font = 'bold 84px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('SOLMARA', VIEW_W / 2, 220);
+  ctx.fillStyle = '#fff';
+  ctx.font = '20px sans-serif';
+  ctx.fillText('A sun-soaked crime story — Mara Voss vs Elias Kross', VIEW_W / 2, 268);
+  ctx.font = '16px sans-serif';
+  ctx.fillStyle = '#ccc';
+  ctx.fillText('WASD drive / walk   •   E steal or exit a car   •   Mouse aim, Click / Space shoot   •   R reload   •   P pause', VIEW_W / 2, 340);
+  ctx.fillText('Four jobs. Five districts. One way out: get rich and get gone.', VIEW_W / 2, 372);
+  ctx.fillStyle = '#ffd700';
+  ctx.font = 'bold 22px sans-serif';
+  ctx.fillText(`Best cash $${save.bestCash.toLocaleString()} · Jobs done ${save.jobsDone}/4`, VIEW_W / 2, 430);
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 26px sans-serif';
+  const blink = Math.sin(performance.now() / 300) > 0;
+  if (blink) ctx.fillText('PRESS ENTER TO START', VIEW_W / 2, 500);
+  ctx.textAlign = 'left';
+}
+
+function drawEnd(title, lines) {
+  ctx.fillStyle = 'rgba(0,0,0,0.72)';
+  ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+  ctx.fillStyle = title === 'BUSTED' ? '#ff2d2d' : title === 'WASTED' ? '#ff2d2d' : '#ffd700';
+  ctx.font = 'bold 64px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText(title, VIEW_W / 2, 260);
+  ctx.fillStyle = '#fff';
+  ctx.font = '20px sans-serif';
+  lines.forEach((line, i) => ctx.fillText(line, VIEW_W / 2, 320 + i * 34));
+  ctx.fillStyle = '#ffd700';
+  ctx.font = 'bold 20px sans-serif';
+  ctx.fillText('Press Enter to play again', VIEW_W / 2, 520);
+  ctx.textAlign = 'left';
+}
+
+function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000);
   last = now;
-  if (screen === 'start' && (input.consumePressed('Enter') || input.consumeClick())) {
-    audio.ensure();
-    screen = 'playing';
-    world.messageTimer = 6;
-  } else if (screen === 'playing') {
-    if (input.consumePressed('KeyP')) screen = 'paused';
-    // aim with the mouse: player faces the cursor
-    const wx = input.mouseX + cam.x;
-    const wy = input.mouseY + cam.y;
-    if (world.player.onFoot) world.player.angle = Math.atan2(wy - world.player.y, wx - world.player.x);
-    world.update(dt, input);
-    if (world.player.hp <= 0) {
-      screen = 'wasted';
-      storeSave(save);
+
+  if (state === 'title') {
+    if (input.consumePressed('Enter')) startGame();
+    drawTitle();
+  } else if (state === 'playing') {
+    if (input.consumePressed('KeyP')) { state = 'paused'; }
+    else {
+      updateWorld(world, input, dt, audio, view);
+      const done = missions.checkArrival(world.player.x, world.player.y);
+      if (done) {
+        world.player.cash = missions.cashEarned();
+        audio.missionDone();
+        if (missions.isFinished()) finishRun('done');
+      }
+      if (world.busted) finishRun('busted');
+      else if (world.wasted) finishRun('wasted');
+      clampView();
+      render(ctx, world, city, missions, view, save);
     }
-    if (world.missionDone && world.missionIndex >= 4) {
-      screen = 'done';
-      storeSave(save);
-    }
-    if (world.missionDone) world.missionDone = false;
-  } else if (screen === 'paused') {
-    if (input.consumePressed('KeyP')) screen = 'playing';
-  } else if ((screen === 'busted' || screen === 'wasted' || screen === 'done') && input.consumePressed('Enter')) {
-    resetRun();
+  } else if (state === 'paused') {
+    if (input.consumePressed('KeyP') || input.consumePressed('Enter')) state = 'playing';
+    render(ctx, world, city, missions, view, save);
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 48px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('PAUSED', VIEW_W / 2, VIEW_H / 2);
+    ctx.textAlign = 'left';
+  } else {
+    if (input.consumePressed('Enter')) location.reload();
+    render(ctx, world, city, missions, view, save);
+    if (state === 'busted') drawEnd('BUSTED', [`The Solmara PD got you.`, `Cash kept: $${world.player.cash.toLocaleString()}`, `Getaway rating: ${endRank}`]);
+    else if (state === 'wasted') drawEnd('WASTED', [`You went down in ${missions.current() ? missions.current().name : 'Solmara'}.`, `Cash kept: $${world.player.cash.toLocaleString()}`, `Getaway rating: ${endRank}`]);
+    else drawEnd('ALL JOBS DONE', [`Mara Voss walks away with $${world.player.cash.toLocaleString()}.`, `Getaway rating: ${endRank}`, `Elias Kross never saw it coming.`]);
   }
-  if (world.wanted >= 5 && world.cops.length > 0 && world.player.hp <= 0) screen = 'wasted';
-  clampCam();
-  drawWorld(ctx, world, cam, screen);
-  requestAnimationFrame(loop);
+
+  requestAnimationFrame(frame);
 }
 
-// Playwright hook: stage a frozen scene, start play, read state.
-window.__solmara = {
-  stage(name) {
-    if (name === 'start') { screen = 'start'; world.frozen = false; return 'start'; }
-    screen = 'playing';
-    stageScene(world, name);
-    clampCam();
-    return name;
-  },
-  play() { unfreeze(world); screen = 'playing'; return 'playing'; },
-  state() {
-    return {
-      screen,
-      x: Math.round(world.player.x),
-      y: Math.round(world.player.y),
-      onFoot: world.player.onFoot,
-      wanted: world.wanted,
-      hp: Math.round(world.player.hp),
-      ammo: world.player.ammo,
-      cash: save.cash,
-      jobsDone: save.jobsDone,
-      mission: world.mission ? world.mission.title : null,
-    };
-  },
-};
+// Screenshot mode: ?shot=chase|city|heist|start stages one frozen frame.
+const params = new URLSearchParams(location.search);
+const shot = params.get('shot');
+if (shot) {
+  const stages = { chase: stageChase, city: stageCity, heist: stageHeist, start: stageStart };
+  const stage = stages[shot];
+  if (stage) {
+    view = stage(world);
+    if (shot === 'start') {
+      drawTitle();
+    } else {
+      render(ctx, world, city, missions, view, save);
+    }
+    document.title = `solmara-shot-${shot}`;
+  }
+} else {
+  requestAnimationFrame(frame);
+}
 
-requestAnimationFrame(loop);
+// Test hooks for the Playwright check.
+window.__solmara = {
+  get state() { return state; },
+  get player() { return world.player; },
+  get world() { return world; },
+  get missions() { return missions; },
+  start: startGame,
+};

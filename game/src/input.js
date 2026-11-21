@@ -1,60 +1,45 @@
-// Keyboard + mouse state, shared by the loop and the screenshot stager.
-export class Input {
-  constructor() {
-    this.keys = new Set();
-    this.pressedQueue = new Set();
-    this.mouseX = 0;
-    this.mouseY = 0;
-    this.mouseDown = false;
-    this.clicked = false;
-    this._down = (e) => {
-      this.keys.add(e.code);
-      this.pressedQueue.add(e.code);
-      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) e.preventDefault();
-    };
-    this._up = (e) => this.keys.delete(e.code);
-    this._move = (e) => {
-      const r = e.target.getBoundingClientRect();
-      this.mouseX = e.clientX - r.left;
-      this.mouseY = e.clientY - r.top;
-    };
-    this._press = (e) => {
-      this._move(e);
-      this.mouseDown = true;
-      this.clicked = true;
-    };
-    this._release = () => { this.mouseDown = false; };
-  }
-  attach(el) {
-    window.addEventListener('keydown', this._down);
-    window.addEventListener('keyup', this._up);
-    el.addEventListener('mousemove', this._move);
-    el.addEventListener('mousedown', this._press);
-    window.addEventListener('mouseup', this._release);
-    el.addEventListener('contextmenu', (e) => e.preventDefault());
-  }
-  axis() {
-    let x = 0;
-    let y = 0;
-    if (this.keys.has('KeyA') || this.keys.has('ArrowLeft')) x -= 1;
-    if (this.keys.has('KeyD') || this.keys.has('ArrowRight')) x += 1;
-    if (this.keys.has('KeyW') || this.keys.has('ArrowUp')) y -= 1;
-    if (this.keys.has('KeyS') || this.keys.has('ArrowDown')) y += 1;
-    return { x, y };
-  }
-  pressed(code) {
-    return this.keys.has(code);
-  }
-  // Edge trigger: true exactly once per physical key press, even if the
-  // press is shorter than one frame.
-  consumePressed(code) {
-    const hit = this.pressedQueue.has(code);
-    this.pressedQueue.delete(code);
-    return hit;
-  }
-  consumeClick() {
-    const c = this.clicked;
-    this.clicked = false;
-    return c;
-  }
+// Keyboard and mouse input with an edge-trigger queue so a quick tap is never lost.
+export function createInput(canvas) {
+  const keys = new Set();
+  const pressedQueue = [];
+  const mouse = { x: 0, y: 0, down: false, clicked: false, clickX: 0, clickY: 0 };
+
+  window.addEventListener('keydown', (e) => {
+    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) e.preventDefault();
+    if (!e.repeat) pressedQueue.push(e.code);
+    keys.add(e.code);
+  });
+  window.addEventListener('keyup', (e) => keys.delete(e.code));
+  window.addEventListener('blur', () => keys.clear());
+
+  canvas.addEventListener('mousemove', (e) => {
+    const r = canvas.getBoundingClientRect();
+    mouse.x = (e.clientX - r.left) * (canvas.width / r.width);
+    mouse.y = (e.clientY - r.top) * (canvas.height / r.height);
+  });
+  canvas.addEventListener('mousedown', (e) => {
+    mouse.down = true;
+    mouse.clicked = true;
+    mouse.clickX = mouse.x;
+    mouse.clickY = mouse.y;
+  });
+  window.addEventListener('mouseup', () => { mouse.down = false; });
+
+  return {
+    keys,
+    mouse,
+    down(code) { return keys.has(code); },
+    consumePressed(code) {
+      const i = pressedQueue.indexOf(code);
+      if (i === -1) return false;
+      pressedQueue.splice(i, 1);
+      return true;
+    },
+    consumeClick() {
+      if (!mouse.clicked) return null;
+      mouse.clicked = false;
+      return { x: mouse.clickX, y: mouse.clickY };
+    },
+    clearQueue() { pressedQueue.length = 0; },
+  };
 }

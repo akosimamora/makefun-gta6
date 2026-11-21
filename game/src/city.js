@@ -1,58 +1,57 @@
-// Solmara layout: a coastal grid city — beach and water on the west edge,
-// five districts, avenues every 320px, buildings filling the blocks.
-import { CONFIG } from './config.js';
-import { mulberry32, intRange, pick } from './random.js';
+// The city of Solmara: districts, a road grid, buildings and landmarks.
+import { WORLD_W, WORLD_H, DISTRICTS, TILE } from './config.js';
 
-export function buildCity() {
-  const rng = mulberry32(20261121);
+export function buildCity(rng) {
   const roads = [];
-  for (let x = 320; x < CONFIG.worldW; x += 320) roads.push({ x1: x, y1: 0, x2: x, y2: CONFIG.worldH, vertical: true });
-  for (let y = 320; y < CONFIG.worldH; y += 320) roads.push({ x1: 0, y1: y, x2: CONFIG.worldW, y2: y, vertical: false });
+  for (let x = TILE; x < WORLD_W; x += TILE) roads.push({ x, y: 0, w: 34, h: WORLD_H, vertical: true });
+  for (let y = TILE; y < WORLD_H; y += TILE) roads.push({ x: 0, y, w: WORLD_W, h: 34, vertical: false });
+
   const buildings = [];
-  const palette = ['#5a4a3a', '#6b5a44', '#4a5568', '#715a3a', '#54423a', '#3f4a5a'];
-  for (let bx = 0; bx < 10; bx++) {
-    for (let by = 0; by < 7; by++) {
-      if (bx === 0) continue; // beach strip, no buildings
-      const n = intRange(rng, 1, 3);
-      for (let i = 0; i < n; i++) {
-        const w = intRange(rng, 90, 180);
-        const h = intRange(rng, 90, 180);
-        const x = bx * 320 + 40 + intRange(rng, 0, Math.max(0, 320 - w - 80));
-        const y = by * 320 + 40 + intRange(rng, 0, Math.max(0, 320 - h - 80));
-        buildings.push({ x, y, w, h, color: pick(rng, palette), roof: rng() < 0.3 });
-      }
+  const palette = ['#b08d57', '#8a7f8d', '#6b7d8a', '#a87f6b', '#7d8a6b', '#93706b'];
+  for (const d of DISTRICTS) {
+    const count = d.id === 'downtown' ? 26 : 16;
+    for (let i = 0; i < count; i++) {
+      const bw = rng.range(70, 150);
+      const bh = rng.range(60, 130);
+      const bx = rng.range(d.x + 60, d.x + d.w - 60 - bw);
+      const by = rng.range(d.y + 60, d.y + d.h - 60 - bh);
+      if (onRoad(bx, by, bw, bh)) continue;
+      buildings.push({ x: bx, y: by, w: bw, h: bh, color: rng.pick(palette), tall: d.id === 'downtown' && rng.chance(0.5) });
     }
   }
-  // Landmarks: Sol Tower at the plaza, the Golden Palm casino, the marina pier.
-  buildings.push({ x: 1960, y: 1380, w: 220, h: 220, color: '#2c3e6b', roof: true, landmark: 'Sol Tower' });
-  buildings.push({ x: 2560, y: 300, w: 260, h: 160, color: '#8a6d1f', roof: true, landmark: 'Golden Palm' });
-  buildings.push({ x: 1500, y: 420, w: 200, h: 120, color: '#1f6b5e', roof: false, landmark: 'Marina' });
-  return {
-    roads,
-    buildings,
-    beach: { x: 0, y: 0, w: 200, h: CONFIG.worldH },
-    water: { x: 0, y: 0, w: 90, h: CONFIG.worldH },
-    plaza: { x: 1900, y: 1320, w: 340, h: 340 },
-    spawn: { x: 600, y: 900 },
-    carSpawns: [
-      { x: 700, y: 1027 }, { x: 830, y: 1027 }, { x: 1020, y: 1347 },
-      { x: 1500, y: 700 }, { x: 2100, y: 1667 }, { x: 2600, y: 1027 },
-      { x: 1100, y: 1987 }, { x: 2400, y: 1987 },
-    ],
-  };
+
+  const landmarks = [
+    { id: 'soltower', name: 'Sol Tower', x: 1500, y: 420, w: 120, h: 120, color: '#2e4a66' },
+    { id: 'vault', name: 'Golden Palm Vault', x: 700, y: 1250, w: 110, h: 90, color: '#8a6d1f' },
+    { id: 'safehouse', name: 'Marina Safehouse', x: 2400, y: 1900, w: 100, h: 80, color: '#2e6b4a' },
+    { id: 'harbor', name: 'Harbor Pier', x: 2800, y: 300, w: 140, h: 60, color: '#4a5a6b' },
+    { id: 'beach', name: 'Palmera Beach', x: 120, y: 700, w: 220, h: 60, color: '#e8d8a8' },
+  ];
+
+  return { districts: DISTRICTS, roads, buildings, landmarks, w: WORLD_W, h: WORLD_H };
 }
 
-export function districtAt(x, y) {
-  for (const d of CONFIG.districts) {
-    if (x >= d.x && x < d.x + d.w && y >= d.y && y < d.y + d.h) return d;
+function onRoad(x, y, w, h) {
+  for (let gx = TILE; gx < WORLD_W; gx += TILE) {
+    if (x < gx + 34 && x + w > gx) return true;
   }
-  return CONFIG.districts[0];
-}
-
-export function onRoad(city, x, y) {
-  for (const r of city.roads) {
-    if (r.vertical && Math.abs(x - r.x1) < 46) return true;
-    if (!r.vertical && Math.abs(y - r.y1) < 46) return true;
+  for (let gy = TILE; gy < WORLD_H; gy += TILE) {
+    if (y < gy + 34 && y + h > gy) return true;
   }
   return false;
+}
+
+export function districtAt(city, x, y) {
+  for (const d of city.districts) {
+    if (x >= d.x && x < d.x + d.w && y >= d.y && y < d.y + d.h) return d;
+  }
+  return city.districts[0];
+}
+
+export function nearestRoadY(y) {
+  return Math.round(y / TILE) * TILE + 17;
+}
+
+export function nearestRoadX(x) {
+  return Math.round(x / TILE) * TILE + 17;
 }
