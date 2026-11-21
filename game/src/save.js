@@ -1,32 +1,27 @@
-// Save / load through localStorage. Cash, district REP, the mission and the
-// best cash survive a reload; a corrupt or missing save just starts fresh.
-
+// Save game: best cash earned in one run and jobs finished, kept in
+// localStorage so the start screen can show them. Never throws —
+// storage can be unavailable (private mode) and the game must not care.
 const KEY = 'solmara-save-v1';
 
 export function loadSave() {
   try {
-    const raw = localStorage.getItem(KEY);
-    if (!raw) return null;
+    const raw = window.localStorage.getItem(KEY);
+    if (!raw) return { bestCash: 0, jobsDone: 0, runs: 0 };
     const data = JSON.parse(raw);
-    if (!data || typeof data !== 'object') return null;
-    return data;
-  } catch {
-    return null;
+    return {
+      bestCash: typeof data.bestCash === 'number' ? data.bestCash : 0,
+      jobsDone: typeof data.jobsDone === 'number' ? data.jobsDone : 0,
+      runs: typeof data.runs === 'number' ? data.runs : 0,
+    };
+  } catch (err) {
+    return { bestCash: 0, jobsDone: 0, runs: 0 };
   }
 }
 
-export function writeSave(data) {
+export function storeSave(save) {
   try {
-    localStorage.setItem(KEY, JSON.stringify(data));
-  } catch {
-    // Private mode or no storage: the game still plays, it just forgets.
-  }
-}
-
-export function clearSave() {
-  try {
-    localStorage.removeItem(KEY);
-  } catch {
-    // ignore
+    window.localStorage.setItem(KEY, JSON.stringify(save));
+  } catch (err) {
+    // Storage unavailable — the run still counts, it just is not kept.
   }
 }

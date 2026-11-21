@@ -1,69 +1,69 @@
-// Keyboard + mouse. A click is one-shot: mousedown stores it, takeClick()
-// hands it out once, so a fast click is never lost between frames. A key
-// press is one-shot the same way: takePressed() consumes it.
-
+// Keyboard + mouse state. WASD/arrows to move and drive, E to steal or
+// enter a car, Space or click to shoot, R to reload, P/Esc to pause,
+// Enter to start. The canvas translates mouse pixels to world aim.
 export function createInput(canvas) {
-  const keys = new Set();
-  const pressed = new Set();
-  const mouse = { x: 0, y: 0, down: false };
-  let click = null;
-
-  const onKeyDown = (e) => {
-    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) e.preventDefault();
-    if (!keys.has(e.code)) pressed.add(e.code);
-    keys.add(e.code);
+  const input = {
+    keys: new Set(),
+    mouse: { x: 0, y: 0, down: false, clicked: false },
+    // One-shot edge triggers, consumed by the game loop each frame.
+    pressed: new Set(),
   };
-  const onKeyUp = (e) => keys.delete(e.code);
-  const onMouseMove = (e) => {
+
+  function keyName(e) {
+    return e.key.length === 1 ? e.key.toLowerCase() : e.key;
+  }
+
+  window.addEventListener('keydown', (e) => {
+    const k = keyName(e);
+    if ([' ', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) e.preventDefault();
+    if (!input.keys.has(k)) input.pressed.add(k);
+    input.keys.add(k);
+  });
+  window.addEventListener('keyup', (e) => {
+    input.keys.delete(keyName(e));
+  });
+  window.addEventListener('blur', () => {
+    input.keys.clear();
+    input.mouse.down = false;
+  });
+
+  canvas.addEventListener('mousemove', (e) => {
     const r = canvas.getBoundingClientRect();
-    mouse.x = e.clientX - r.left;
-    mouse.y = e.clientY - r.top;
-  };
-  const onMouseDown = (e) => {
-    const r = canvas.getBoundingClientRect();
-    const x = e.clientX - r.left;
-    const y = e.clientY - r.top;
-    mouse.down = true;
-    mouse.x = x;
-    mouse.y = y;
-    click = { x, y };
-  };
-  const onMouseUp = () => { mouse.down = false; };
+    input.mouse.x = e.clientX - r.left;
+    input.mouse.y = e.clientY - r.top;
+  });
+  canvas.addEventListener('mousedown', (e) => {
+    if (e.button === 0) {
+      input.mouse.down = true;
+      input.mouse.clicked = true;
+    }
+  });
+  window.addEventListener('mouseup', () => {
+    input.mouse.down = false;
+  });
 
-  window.addEventListener('keydown', onKeyDown);
-  window.addEventListener('keyup', onKeyUp);
-  canvas.addEventListener('mousemove', onMouseMove);
-  canvas.addEventListener('mousedown', onMouseDown);
-  window.addEventListener('mouseup', onMouseUp);
+  input.axis = function axis() {
+    let x = 0;
+    let y = 0;
+    if (input.keys.has('a') || input.keys.has('ArrowLeft')) x -= 1;
+    if (input.keys.has('d') || input.keys.has('ArrowRight')) x += 1;
+    if (input.keys.has('w') || input.keys.has('ArrowUp')) y -= 1;
+    if (input.keys.has('s') || input.keys.has('ArrowDown')) y += 1;
+    return { x, y };
+  };
 
-  return {
-    /** Whether a key is held right now. */
-    isDown: (code) => keys.has(code),
-    /** WASD / arrow movement, as a unit-ish vector. */
-    move: () => {
-      let x = 0;
-      let y = 0;
-      if (keys.has('KeyA') || keys.has('ArrowLeft')) x -= 1;
-      if (keys.has('KeyD') || keys.has('ArrowRight')) x += 1;
-      if (keys.has('KeyW') || keys.has('ArrowUp')) y -= 1;
-      if (keys.has('KeyS') || keys.has('ArrowDown')) y += 1;
-      return { x, y };
-    },
-    run: () => keys.has('ShiftLeft') || keys.has('ShiftRight'),
-    mouse,
-    /** The pending click, once, or null. */
-    takeClick: () => {
-      const c = click;
-      click = null;
-      return c;
-    },
-    /** Whether the key was pressed since the last take, consumed once. */
-    takePressed: (code) => {
-      if (!pressed.has(code)) return false;
-      pressed.delete(code);
+  input.consumePressed = function consumePressed(k) {
+    if (input.pressed.has(k)) {
+      input.pressed.delete(k);
       return true;
-    },
-    /** Drop every pending press (call when the screen changes). */
-    clearPressed: () => pressed.clear(),
+    }
+    return false;
   };
+
+  input.endFrame = function endFrame() {
+    input.pressed.clear();
+    input.mouse.clicked = false;
+  };
+
+  return input;
 }

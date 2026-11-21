@@ -1,152 +1,89 @@
-// Synthesised sound, no audio files: an engine hum, a two-tone siren,
-// gunshots and mission jingles, all from the Web Audio API. Everything is
-// a no-op until a user gesture creates the context, and nothing here ever
-// throws into the game loop.
+// Tiny WebAudio synth: no audio files, every sound is an oscillator
+// shaped in code. Silent until the first user gesture (browsers block
+// audio before interaction), and safe to call before init.
+let ctx = null;
+let master = null;
+let sirenTimer = null;
 
-export function createAudio() {
-  let ctx = null;
-  let master = null;
-  let muted = false;
-  let engineOsc = null;
-  let engineGain = null;
-  let engineFilter = null;
-  let sirenOsc = null;
-  let sirenGain = null;
-  let sirenPhase = false;
-  let sirenTimer = 0;
-
-  function ensure() {
-    if (ctx) return true;
-    try {
-      const AC = window.AudioContext || window.webkitAudioContext;
-      if (!AC) return false;
-      ctx = new AC();
-      master = ctx.createGain();
-      master.gain.value = muted ? 0 : 0.5;
-      master.connect(ctx.destination);
-      return true;
-    } catch {
-      return false;
-    }
+function ensure() {
+  if (ctx) return true;
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return false;
+    ctx = new AC();
+    master = ctx.createGain();
+    master.gain.value = 0.16;
+    master.connect(ctx.destination);
+    return true;
+  } catch (err) {
+    return false;
   }
-
-  /** Call on any gesture; creates the context so later sounds play. */
-  function unlock() {
-    if (!ensure()) return;
-    if (ctx.state === 'suspended') ctx.resume().catch(() => {});
-  }
-
-  /** Engine hum: pitch and loudness follow the car's speed (0..1). */
-  function setEngine(speed01, driving) {
-    if (!ensure()) return;
-    try {
-      if (!driving) {
-        if (engineGain) engineGain.gain.setTargetAtTime(0, ctx.currentTime, 0.1);
-        return;
-      }
-      if (!engineOsc) {
-        engineOsc = ctx.createOscillator();
-        engineOsc.type = 'sawtooth';
-        engineFilter = ctx.createBiquadFilter();
-        engineFilter.type = 'lowpass';
-        engineFilter.frequency.value = 420;
-        engineGain = ctx.createGain();
-        engineGain.gain.value = 0;
-        engineOsc.connect(engineFilter);
-        engineFilter.connect(engineGain);
-        engineGain.connect(master);
-        engineOsc.start();
-      }
-      const f = 55 + speed01 * 135;
-      engineOsc.frequency.setTargetAtTime(f, ctx.currentTime, 0.08);
-      engineGain.gain.setTargetAtTime(0.05 + speed01 * 0.06, ctx.currentTime, 0.1);
-    } catch { /* sound is never fatal */ }
-  }
-
-  /** Two-tone siren while police are close; call every frame with on/off. */
-  function setSiren(on) {
-    if (!ensure()) return;
-    try {
-      if (!on) {
-        if (sirenGain) sirenGain.gain.setTargetAtTime(0, ctx.currentTime, 0.15);
-        return;
-      }
-      if (!sirenOsc) {
-        sirenOsc = ctx.createOscillator();
-        sirenOsc.type = 'triangle';
-        sirenOsc.frequency.value = 660;
-        sirenGain = ctx.createGain();
-        sirenGain.gain.value = 0;
-        sirenOsc.connect(sirenGain);
-        sirenGain.connect(master);
-        sirenOsc.start();
-      }
-      sirenGain.gain.setTargetAtTime(0.045, ctx.currentTime, 0.1);
-      sirenTimer += 1 / 60;
-      if (sirenTimer > 0.42) {
-        sirenTimer = 0;
-        sirenPhase = !sirenPhase;
-        sirenOsc.frequency.setTargetAtTime(sirenPhase ? 880 : 660, ctx.currentTime, 0.02);
-      }
-    } catch { /* ignore */ }
-  }
-
-  /** One gunshot: a short noise burst plus a low thump. */
-  function gunshot() {
-    if (!ensure()) return;
-    try {
-      const len = Math.floor(ctx.sampleRate * 0.09);
-      const buf = ctx.createBuffer(1, len, ctx.sampleRate);
-      const data = buf.getChannelData(0);
-      for (let i = 0; i < len; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / len);
-      const src = ctx.createBufferSource();
-      src.buffer = buf;
-      const g = ctx.createGain();
-      g.gain.value = 0.5;
-      src.connect(g);
-      g.connect(master);
-      src.start();
-      const thump = ctx.createOscillator();
-      thump.type = 'sine';
-      thump.frequency.setValueAtTime(140, ctx.currentTime);
-      thump.frequency.exponentialRampToValueAtTime(45, ctx.currentTime + 0.09);
-      const tg = ctx.createGain();
-      tg.gain.setValueAtTime(0.5, ctx.currentTime);
-      tg.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.1);
-      thump.connect(tg);
-      tg.connect(master);
-      thump.start();
-      thump.stop(ctx.currentTime + 0.11);
-    } catch { /* ignore */ }
-  }
-
-  /** Mission-complete jingle: four rising notes. */
-  function jingle() {
-    if (!ensure()) return;
-    try {
-      const notes = [523.25, 659.25, 783.99, 1046.5];
-      notes.forEach((freq, i) => {
-        const t = ctx.currentTime + i * 0.11;
-        const o = ctx.createOscillator();
-        o.type = 'sine';
-        o.frequency.value = freq;
-        const g = ctx.createGain();
-        g.gain.setValueAtTime(0.0001, t);
-        g.gain.exponentialRampToValueAtTime(0.22, t + 0.02);
-        g.gain.exponentialRampToValueAtTime(0.001, t + 0.32);
-        o.connect(g);
-        g.connect(master);
-        o.start(t);
-        o.stop(t + 0.35);
-      });
-    } catch { /* ignore */ }
-  }
-
-  function toggleMute() {
-    muted = !muted;
-    if (master) master.gain.value = muted ? 0 : 0.5;
-    return muted;
-  }
-
-  return { unlock, setEngine, setSiren, gunshot, jingle, toggleMute, isMuted: () => muted };
 }
+
+function tone(freq, dur, type = 'sine', vol = 1, slideTo = null) {
+  if (!ensure() || ctx.state === 'suspended') return;
+  const t0 = ctx.currentTime;
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = type;
+  osc.frequency.setValueAtTime(freq, t0);
+  if (slideTo) osc.frequency.exponentialRampToValueAtTime(Math.max(20, slideTo), t0 + dur);
+  gain.gain.setValueAtTime(vol, t0);
+  gain.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
+  osc.connect(gain);
+  gain.connect(master);
+  osc.start(t0);
+  osc.stop(t0 + dur + 0.02);
+}
+
+function noise(dur, vol = 1, lowpass = 1200) {
+  if (!ensure() || ctx.state === 'suspended') return;
+  const t0 = ctx.currentTime;
+  const len = Math.max(1, Math.floor(ctx.sampleRate * dur));
+  const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / len);
+  const src = ctx.createBufferSource();
+  src.buffer = buf;
+  const filter = ctx.createBiquadFilter();
+  filter.type = 'lowpass';
+  filter.frequency.value = lowpass;
+  const gain = ctx.createGain();
+  gain.gain.setValueAtTime(vol, t0);
+  gain.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
+  src.connect(filter);
+  filter.connect(gain);
+  gain.connect(master);
+  src.start(t0);
+}
+
+export const sound = {
+  // Call from any user gesture (start button, key press) to unlock audio.
+  unlock() {
+    if (ensure() && ctx.state === 'suspended') ctx.resume();
+  },
+  shoot() { noise(0.12, 0.9, 3000); tone(180, 0.08, 'square', 0.5, 60); },
+  hit() { tone(140, 0.1, 'sawtooth', 0.5, 70); },
+  pickup() { tone(660, 0.09, 'sine', 0.6); tone(990, 0.14, 'sine', 0.6); },
+  crash() { noise(0.25, 0.8, 700); },
+  door() { tone(220, 0.07, 'triangle', 0.5, 160); },
+  mission() { tone(523, 0.12, 'sine', 0.6); tone(659, 0.12, 'sine', 0.6); tone(784, 0.2, 'sine', 0.6); },
+  busted() { tone(392, 0.25, 'sawtooth', 0.5, 196); tone(311, 0.4, 'sawtooth', 0.5, 155); },
+  siren(on) {
+    if (on && !sirenTimer) {
+      let hi = false;
+      sirenTimer = setInterval(() => {
+        tone(hi ? 950 : 700, 0.28, 'sine', 0.22);
+        hi = !hi;
+      }, 300);
+    } else if (!on && sirenTimer) {
+      clearInterval(sirenTimer);
+      sirenTimer = null;
+    }
+  },
+  engine(on) {
+    // Engine hum is a low sawtooth loop driven by the render loop's
+    // speed; here we just blip it — the loop calls engineTick.
+    if (on) tone(55, 0.1, 'sawtooth', 0.12, 90);
+  },
+};

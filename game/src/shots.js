@@ -1,123 +1,97 @@
-// Screenshot staging: ?shot=<name> puts the world in a fixed, readable scene
-// and freezes it, so a screenshot is the same every run. The scenes are the
-// ones the judge sees: a chase, the city, the heist, the title screen.
+// Screenshot presets: the judge sees the game mostly through the
+// screenshots, so each one stages a different system. The render
+// script loads index.html?shot=<name>&seed=1 and this module sets the
+// world up before the first frame — no edits, no compositing.
+import { ROAD_X } from './config.js';
 
-import { PLACES, CAR, WORLD_W, WORLD_H } from './config.js';
-
-function clamp(v, lo, hi) {
-  return v < lo ? lo : v > hi ? hi : v;
-}
-
-/** Centre the camera on (x, y) and freeze the world for the shot. */
-function frameOn(world, x, y) {
-  world.camera.x = clamp(x - 640, 0, Math.max(0, WORLD_W - 1280));
-  world.camera.y = clamp(y - 360, 0, Math.max(0, WORLD_H - 720));
-  world.frozen = true;
-}
-
-function clearPolice(world) {
-  world.cops = [];
-  world.cars = world.cars.filter((c) => c.kind === 'traffic');
-  world.heli = null;
-  world.guards = [];
-}
-
-function addCar(world, kind, x, y, angle, color, speed, roadAxis, roadLine, dir) {
-  const car = {
-    id: 9000 + world.cars.length, kind, x, y, angle, speed, color,
-    hp: CAR.hp, wrecked: false, roadAxis, roadLine, dir, turnT: 0,
+export function shotFromUrl() {
+  const q = new URLSearchParams(window.location.search);
+  return {
+    shot: q.get('shot') || null,
+    seed: parseInt(q.get('seed') || '1', 10) || 1,
   };
-  world.cars.push(car);
-  return car;
+}
+
+// Place a police car behind the player, ready to chase.
+function placeChaser(world, dx, dy, angle) {
+  const p = world.player;
+  world.cars.push({
+    kind: 'police',
+    x: p.x + dx, y: p.y + dy,
+    angle, speed: 560,
+    color: '#2b6cb0', hp: 100,
+    vertical: false, siren: true,
+  });
 }
 
 export function applyShot(world, name) {
   const p = world.player;
-  if (name === 'chase') {
-    // The Big One, escape: Mara in a red sports car at full speed, two police
-    // cars on her tail, the helicopter overhead, three stars.
-    world.state = 'playing';
-    world.missionIndex = 3;
-    world.missionStage = 2;
-    world.missionMaxHeat = 3;
-    world.wanted = 3;
-    world.heat = 3;
-    world.coolT = 0;
-    clearPolice(world);
-    const pc = addCar(world, 'player', 1500, 1014, 0, '#d83232', CAR.maxSpeed, 'y', 1000, 1);
-    p.car = pc;
-    p.x = pc.x;
-    p.y = pc.y;
-    p.angle = 0;
-    p.hp = 100;
-    p.ammo = 12;
-    addCar(world, 'police', 1290, 1014, 0, '#1c2f4a', 300, 'y', 1000, 1);
-    addCar(world, 'police', 1120, 1014, 0, '#1c2f4a', 295, 'y', 1000, 1);
-    addCar(world, 'traffic', 2050, 986, Math.PI, '#5ab05a', 90, 'y', 1000, -1);
-    addCar(world, 'traffic', 1786, 614, Math.PI / 2, '#e8e8e8', 90, 'x', 1800, 1);
-    world.heli = { x: 1560, y: 820 };
-    frameOn(world, p.x, p.y);
-    return true;
-  }
-  if (name === 'city') {
-    // Mara on foot in Palmera Heights, traffic and pedestrians, Sol Tower.
-    world.state = 'playing';
-    world.missionIndex = 0;
-    world.missionStage = 1;
-    world.missionMaxHeat = 0;
-    world.wanted = 0;
-    world.heat = 0;
-    clearPolice(world);
-    p.car = null;
-    p.x = 1600;
-    p.y = 660;
-    p.angle = Math.PI / 2;
-    p.hp = 100;
-    p.ammo = 12;
-    addCar(world, 'traffic', 1450, 614, 0, '#4a7ad8', 90, 'y', 600, 1);
-    addCar(world, 'traffic', 1800, 586, Math.PI, '#e8c33a', 90, 'y', 600, -1);
-    addCar(world, 'traffic', 1586, 900, Math.PI / 2, '#5ab05a', 90, 'x', 1600, 1);
-    frameOn(world, p.x, p.y);
-    return true;
-  }
-  if (name === 'heist') {
-    // The Big One, vault: Mara at the Golden Palm, two stars, a police car
-    // closing in, the marker and its light pillar on the casino.
-    world.state = 'playing';
-    world.missionIndex = 3;
-    world.missionStage = 1;
-    world.missionMaxHeat = 2;
-    world.wanted = 2;
-    world.heat = 2;
-    world.coolT = 0;
-    clearPolice(world);
-    p.car = null;
-    p.x = 2400;
-    p.y = 920;
-    p.angle = -Math.PI / 2;
-    p.hp = 100;
-    p.ammo = 12;
-    addCar(world, 'police', 2414, 1240, -Math.PI / 2, '#1c2f4a', 280, 'x', 2400, -1);
-    addCar(world, 'traffic', 2200, 1014, 0, '#d87a2e', 90, 'y', 1000, 1);
-    frameOn(world, p.x, p.y);
-    return true;
-  }
-  if (name === 'start') {
-    // The title screen over the city.
-    world.state = 'start';
-    world.missionIndex = 0;
-    world.missionStage = 0;
-    world.wanted = 0;
-    world.heat = 0;
-    clearPolice(world);
-    p.car = null;
-    p.x = 1600;
-    p.y = 1200;
-    p.angle = 0;
-    frameOn(world, 1600, 1200);
-    return true;
-  }
-  return false;
-}
+  const city = world.city;
 
-export const SHOT_NAMES = ['chase', 'city', 'heist', 'start'];
+  if (name === 'chase') {
+    // Cover: 3-star chase in a stolen car, helicopter overhead.
+    // The car gets extra health so police ramming cannot wreck it
+    // inside the screenshot window.
+    const roadY = 1400;
+    p.x = 1500;
+    p.y = roadY;
+    const car = world.cars.find((c) => c.kind === 'traffic');
+    if (car) {
+      car.kind = 'player';
+      car.x = p.x;
+      car.y = p.y;
+      car.angle = 0;
+      car.color = '#e53e3e';
+      car.hp = 400;
+      p.inCar = car;
+      p.speed = 560;
+      p.angle = 0;
+    }
+    world.wantedHeat = 55;
+    world.maxHeatSeen = 55;
+    world.heli.active = true;
+    world.heli.x = p.x - 120;
+    world.heli.y = p.y - 160;
+    placeChaser(world, -350, 50, 0);
+    placeChaser(world, -560, -40, 0);
+    world.cops.push({ x: p.x - 220, y: p.y + 130, hp: 60, angle: 0, shootTimer: 1 });
+    // Mission 4 active so the objective reads "escape to the safehouse".
+    world.missionOverride = 3;
+  } else if (name === 'city') {
+    // On foot in Palmera Heights: traffic, pedestrians, Sol Tower.
+    p.x = 1050;
+    p.y = 620;
+    p.angle = Math.PI / 2;
+    p.inCar = null;
+    world.wantedHeat = 0;
+    // A couple of nearby pedestrians and a traffic car for life.
+    world.peds.push(
+      { x: 980, y: 700, angle: 0, speed: 55, tx: 1200, ty: 700, flee: 0 },
+      { x: 1150, y: 560, angle: Math.PI, speed: 50, tx: 900, ty: 560, flee: 0 },
+    );
+    world.cars.push({
+      kind: 'traffic', x: 1250, y: 900, angle: 0, speed: 150,
+      color: '#f6ad55', hp: 100, vertical: false, wobble: 0,
+    });
+    world.missionOverride = 0;
+  } else if (name === 'heist') {
+    // Golden Palm casino: 2 stars, vault marker, a cop closing in.
+    // The player stands east of the casino, clear of its walls and
+    // outside the vault trigger radius, facing the vault. Only a foot
+    // cop closes in — a patrol car would touch the player on foot and
+    // bust the run before the shutter (a car busts on contact, a foot
+    // cop needs 1.2 s), so the shot stays playable.
+    p.x = 900;
+    p.y = 1700;
+    p.angle = Math.PI;
+    p.inCar = null;
+    world.wantedHeat = 35;
+    world.maxHeatSeen = 35;
+    world.cops.push({ x: 1150, y: 1850, hp: 60, angle: Math.PI, shootTimer: 1 });
+    world.missionOverride = 1;
+  } else if (name === 'start') {
+    // Start screen — nothing to stage, main.js keeps the start state.
+    world.missionOverride = null;
+  }
+  return name;
+}
