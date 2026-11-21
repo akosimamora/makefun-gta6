@@ -1,50 +1,32 @@
-// Saving Solmara: cash, standing, jobs finished and the best cash, kept in
-// localStorage (this browser only). A save that cannot be read, or that is not
-// shaped like one, is ignored and the game starts fresh — a corrupt save never
-// stops the game.
+// Save / load through localStorage. Cash, district REP, the mission and the
+// best cash survive a reload; a corrupt or missing save just starts fresh.
 
-import { BEST_KEY, SAVE_KEY } from './config.js';
+const KEY = 'solmara-save-v1';
 
 export function loadSave() {
   try {
-    const raw = window.localStorage.getItem(SAVE_KEY);
+    const raw = localStorage.getItem(KEY);
     if (!raw) return null;
     const data = JSON.parse(raw);
-    if (typeof data !== 'object' || data === null) return null;
-    return {
-      cash: typeof data.cash === 'number' ? data.cash : 250,
-      rep: typeof data.rep === 'number' ? data.rep : 0,
-      missionsDone: typeof data.missionsDone === 'number' ? data.missionsDone : 0,
-    };
+    if (!data || typeof data !== 'object') return null;
+    return data;
   } catch {
     return null;
   }
 }
 
-export function saveGame(world) {
+export function writeSave(data) {
   try {
-    window.localStorage.setItem(SAVE_KEY, JSON.stringify({
-      cash: Math.floor(world.player.cash),
-      rep: Math.floor(world.player.rep),
-      missionsDone: world.mission.done,
-    }));
+    localStorage.setItem(KEY, JSON.stringify(data));
   } catch {
-    // Storage can be off (private windows): the run then lasts this visit only.
+    // Private mode or no storage: the game still plays, it just forgets.
   }
 }
 
-export function readBest() {
+export function clearSave() {
   try {
-    return Number.parseInt(window.localStorage.getItem(BEST_KEY) ?? '0', 10) || 0;
+    localStorage.removeItem(KEY);
   } catch {
-    return 0;
-  }
-}
-
-export function saveBest(value) {
-  try {
-    window.localStorage.setItem(BEST_KEY, String(Math.floor(value)));
-  } catch {
-    // Storage can be off: the best then lasts this visit only.
+    // ignore
   }
 }

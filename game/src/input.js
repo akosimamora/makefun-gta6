@@ -1,127 +1,69 @@
-// Keyboard and mouse input for Solmara. Held keys give a movement direction
-// (and, in a car, throttle, steering and brake); one-shot presses (enter a car,
-// confirm, pause, mute) are queued as flags and taken once by the loop, so a
-// press between two frames is never lost and never counted twice. The mouse
-// aims Mara's pistol: its screen position converts to a world position
-// through the camera, so a click shoots where the player points.
-
-import { KEY } from './config.js';
-
-export const ACTION_CONFIRM = 1;
-export const ACTION_PAUSE = 2;
-export const ACTION_MUTE = 4;
-
-const has = (list, code) => list.includes(code);
+// Keyboard + mouse. A click is one-shot: mousedown stores it, takeClick()
+// hands it out once, so a fast click is never lost between frames. A key
+// press is one-shot the same way: takePressed() consumes it.
 
 export function createInput(canvas) {
   const keys = new Set();
-  let actions = 0;
-  let enterQueued = false;
-  let mouseX = 0;
-  let mouseY = 0;
-  let mouseHeld = false;
-  // A one-shot for a click: set on mousedown, read and cleared by the next
-  // world step. A very quick click still registers, even if no frame falls
-  // between the press and the release.
-  let clicked = false;
+  const pressed = new Set();
+  const mouse = { x: 0, y: 0, down: false };
+  let click = null;
 
-  window.addEventListener('keydown', (event) => {
-    if (has(KEY.confirm, event.code)) {
-      if (!event.repeat) actions |= ACTION_CONFIRM;
-    } else if (has(KEY.pause, event.code)) {
-      if (!event.repeat) actions |= ACTION_PAUSE;
-    } else if (has(KEY.mute, event.code)) {
-      if (!event.repeat) actions |= ACTION_MUTE;
-    } else if (has(KEY.enter, event.code)) {
-      if (!event.repeat) enterQueued = true;
-    } else if (has(KEY.up, event.code) || has(KEY.down, event.code) || has(KEY.left, event.code)
-      || has(KEY.right, event.code) || has(KEY.run, event.code) || has(KEY.brake, event.code)) {
-      // A movement key: fall through to record it below.
-    } else {
-      return;
-    }
-    keys.add(event.code);
-    if (has(KEY.up, event.code) || has(KEY.down, event.code) || has(KEY.left, event.code)
-      || has(KEY.right, event.code) || has(KEY.brake, event.code) || has(KEY.confirm, event.code)) {
-      event.preventDefault();
-    }
-  });
-  window.addEventListener('keyup', (event) => {
-    keys.delete(event.code);
-  });
-  // A key released while the tab is hidden never sends keyup: let go on blur.
-  window.addEventListener('blur', () => {
-    keys.clear();
-    mouseHeld = false;
-  });
-  canvas.addEventListener('mousemove', (event) => {
-    const rect = canvas.getBoundingClientRect();
-    mouseX = event.clientX - rect.left;
-    mouseY = event.clientY - rect.top;
-  });
-  canvas.addEventListener('mousedown', (event) => {
-    if (event.button === 0) {
-      mouseHeld = true;
-      clicked = true;
-      const rect = canvas.getBoundingClientRect();
-      mouseX = event.clientX - rect.left;
-      mouseY = event.clientY - rect.top;
-    }
-  });
-  window.addEventListener('mouseup', (event) => {
-    if (event.button === 0) mouseHeld = false;
-  });
-  canvas.addEventListener('contextmenu', (event) => event.preventDefault());
+  const onKeyDown = (e) => {
+    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) e.preventDefault();
+    if (!keys.has(e.code)) pressed.add(e.code);
+    keys.add(e.code);
+  };
+  const onKeyUp = (e) => keys.delete(e.code);
+  const onMouseMove = (e) => {
+    const r = canvas.getBoundingClientRect();
+    mouse.x = e.clientX - r.left;
+    mouse.y = e.clientY - r.top;
+  };
+  const onMouseDown = (e) => {
+    const r = canvas.getBoundingClientRect();
+    const x = e.clientX - r.left;
+    const y = e.clientY - r.top;
+    mouse.down = true;
+    mouse.x = x;
+    mouse.y = y;
+    click = { x, y };
+  };
+  const onMouseUp = () => { mouse.down = false; };
 
-  const down = (list) => list.some((code) => keys.has(code));
+  window.addEventListener('keydown', onKeyDown);
+  window.addEventListener('keyup', onKeyUp);
+  canvas.addEventListener('mousemove', onMouseMove);
+  canvas.addEventListener('mousedown', onMouseDown);
+  window.addEventListener('mouseup', onMouseUp);
 
   return {
-    // A 2D movement direction, {x, y}, normalized by the caller.
-    direction() {
-      return {
-        x: (down(KEY.right) ? 1 : 0) - (down(KEY.left) ? 1 : 0),
-        y: (down(KEY.down) ? 1 : 0) - (down(KEY.up) ? 1 : 0),
-      };
+    /** Whether a key is held right now. */
+    isDown: (code) => keys.has(code),
+    /** WASD / arrow movement, as a unit-ish vector. */
+    move: () => {
+      let x = 0;
+      let y = 0;
+      if (keys.has('KeyA') || keys.has('ArrowLeft')) x -= 1;
+      if (keys.has('KeyD') || keys.has('ArrowRight')) x += 1;
+      if (keys.has('KeyW') || keys.has('ArrowUp')) y -= 1;
+      if (keys.has('KeyS') || keys.has('ArrowDown')) y += 1;
+      return { x, y };
     },
-    up: () => down(KEY.up),
-    down: () => down(KEY.down),
-    left: () => down(KEY.left),
-    right: () => down(KEY.right),
-    run: () => down(KEY.run),
-    brake: () => down(KEY.brake),
-    // Whether the E key was pressed since the last call (enter/exit a car).
-    takeEnter() {
-      const taken = enterQueued;
-      enterQueued = false;
-      return taken;
+    run: () => keys.has('ShiftLeft') || keys.has('ShiftRight'),
+    mouse,
+    /** The pending click, once, or null. */
+    takeClick: () => {
+      const c = click;
+      click = null;
+      return c;
     },
-    // The one-shot presses since the last call, as ACTION_* flags.
-    takeActions() {
-      const taken = actions;
-      actions = 0;
-      return taken;
+    /** Whether the key was pressed since the last take, consumed once. */
+    takePressed: (code) => {
+      if (!pressed.has(code)) return false;
+      pressed.delete(code);
+      return true;
     },
-    // Whether the left mouse button is held (shoot).
-    mouseDown: () => mouseHeld,
-    // A click, once: the next call returns false until the next press.
-    takeClick() {
-      const was = clicked;
-      clicked = false;
-      return was;
-    },
-    // The mouse position in world units, through the camera.
-    mouseWorld(camera) {
-      const viewW = canvas.width;
-      const viewH = canvas.height;
-      const scale = Math.min(viewW / 1280, viewH / 720) * camera.zoom;
-      const ox = (viewW - 1280 * scale) / 2;
-      const oy = (viewH - 720 * scale) / 2;
-      const shakeX = camera.shake > 0 ? (Math.random() - 0.5) * camera.shake : 0;
-      const shakeY = camera.shake > 0 ? (Math.random() - 0.5) * camera.shake : 0;
-      return {
-        x: camera.x + (mouseX - ox - 640 * scale) / scale + shakeX,
-        y: camera.y + (mouseY - oy - 360 * scale) / scale + shakeY,
-      };
-    },
+    /** Drop every pending press (call when the screen changes). */
+    clearPressed: () => pressed.clear(),
   };
 }

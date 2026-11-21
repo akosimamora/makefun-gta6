@@ -1,11 +1,9 @@
-// A seeded random number generator (mulberry32) plus the small helpers the
-// city and the world use: a range, an integer, a pick from a list, a chance.
-// The same seed gives the same city, the same traffic and the same staged
-// screenshots, which is what makes a ?shot= scene repeatable.
+// Seeded RNG (mulberry32): the same seed builds the same Solmara, every run.
 
-export function createRandom(seed) {
-  let a = seed | 0;
+export function createRng(seed) {
+  let a = seed >>> 0;
   const next = () => {
+    a |= 0;
     a = (a + 0x6d2b79f5) | 0;
     let t = Math.imul(a ^ (a >>> 15), 1 | a);
     t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
@@ -13,13 +11,9 @@ export function createRandom(seed) {
   };
   return {
     next,
-    // A float in [min, max).
-    range: (min, max) => min + next() * (max - min),
-    // An integer in [min, max].
-    int: (min, max) => min + Math.floor(next() * (max - min + 1)),
-    // One item of a list, uniformly.
-    pick: (list) => list[Math.floor(next() * list.length)],
-    // True with probability p.
+    range: (lo, hi) => lo + next() * (hi - lo),
+    int: (lo, hi) => lo + Math.floor(next() * (hi - lo + 1)),
+    pick: (arr) => arr[Math.floor(next() * arr.length)],
     chance: (p) => next() < p,
   };
 }

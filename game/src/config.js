@@ -1,143 +1,92 @@
-// Solmara: the city, the tuning and the keys. One place for every number the
-// game balances on, so a tweak never means hunting through the world code.
-// The city is a sun-soaked coastal town of five districts, 3200 by 2400 units,
-// drawn top-down on a canvas. Roads run on a 400-unit grid; the west edge is
-// the bay. Everything here is original: no names, maps or art from any
-// commercial game.
+// Solmara tuning: world, roads, districts, physics, wanted, combat.
+// One place for every number the game uses; the other files read, never invent.
 
 export const WORLD_W = 3200;
 export const WORLD_H = 2400;
+export const ROAD_STEP = 400;
+export const ROAD_W = 56;
+export const SEED = 20261121;
 
-// --- the road grid -------------------------------------------------------
-export const ROAD_STEP = 400; // roads every 400 units
-export const ROAD_W = 72; // asphalt plus sidewalks
-export const ROAD_ASPHALT = 48;
-export const FIRST_ROAD_X = 400;
-export const FIRST_ROAD_Y = 400;
+// Road centrelines. The bay sits west of x=200; the street grid starts there.
+export const ROAD_XS = [200, 600, 1000, 1400, 1800, 2200, 2600, 3000];
+export const ROAD_YS = [200, 600, 1000, 1400, 1800, 2200];
 
-// --- districts: name, bounds, palette, starting standing -----------------
-// A district's standing (rep) grows as Mara finishes jobs there; the minimap
-// tints a district from grey toward gold as its standing rises.
+// Five districts. x1/y1 are exclusive bounds; districtAt takes the first match.
 export const DISTRICTS = [
   {
-    id: 'marina',
-    name: 'Marina del Sol',
-    x: 0, y: 0, w: 800, h: 2400,
-    road: '#8a7a5c', roof: ['#e8b48a', '#d99a6c', '#c98a7a'],
-    accent: '#2e7f9e', rep: 0,
+    id: 'marina', name: 'Marina del Sol', x0: 0, y0: 0, x1: 800, y1: 1200,
+    ground: '#79b3a4', groundAlt: '#86bfae',
+    buildings: ['#e9d9b4', '#dcc9a2', '#f2e4c4', '#cfe0e8'],
+    accent: '#2e8f86',
   },
   {
-    id: 'heights',
-    name: 'Palmera Heights',
-    x: 800, y: 0, w: 1200, h: 1200,
-    road: '#7a7a72', roof: ['#b8c4cc', '#9fb2c0', '#d8d2c4'],
-    accent: '#c98a2e', rep: 0,
+    id: 'palmera', name: 'Palmera Heights', x0: 800, y0: 0, x1: 2000, y1: 1200,
+    ground: '#d9d3c3', groundAlt: '#e2dccb',
+    buildings: ['#f2f0ea', '#dfe8f0', '#cfd6dd', '#e8e2d2'],
+    accent: '#7a9a6a',
   },
   {
-    id: 'neon',
-    name: 'Neon Mile',
-    x: 800, y: 1200, w: 1200, h: 1200,
-    road: '#5c4a6e', roof: ['#e06a9e', '#7a5cc9', '#e8a83e'],
-    accent: '#e83e8a', rep: 0,
+    id: 'neon', name: 'Neon Mile', x0: 2000, y0: 0, x1: 3200, y1: 1200,
+    ground: '#8b7ed6', groundAlt: '#9789dd',
+    buildings: ['#ff7fa5', '#b07fe8', '#ffab5e', '#e86a9a'],
+    accent: '#ff4d8d',
   },
   {
-    id: 'calle',
-    name: 'Calle Sol',
-    x: 2000, y: 0, w: 1200, h: 1200,
-    road: '#8a7a5c', roof: ['#e8c98a', '#d9a86c', '#c9b48a'],
-    accent: '#e07a2e', rep: 0,
+    id: 'calle', name: 'Calle Sol', x0: 0, y0: 1200, x1: 1600, y1: 2400,
+    ground: '#d6b475', groundAlt: '#dfc083',
+    buildings: ['#f2c14e', '#e8863a', '#d95f4b', '#f7dc8a'],
+    accent: '#c96a2e',
   },
   {
-    id: 'docks',
-    name: 'Dockside',
-    x: 2000, y: 1200, w: 1200, h: 1200,
-    road: '#6e6e66', roof: ['#8a8a82', '#a89a7a', '#7a7a72'],
-    accent: '#5c8a2e', rep: 0,
+    id: 'dockside', name: 'Dockside', x0: 1600, y0: 1200, x1: 3200, y1: 2400,
+    ground: '#9b9b90', groundAlt: '#a6a69b',
+    buildings: ['#8a8f96', '#6f7a86', '#a89a80', '#5f6a72'],
+    accent: '#5a7a8a',
   },
 ];
 
-// --- the bay and the beach ------------------------------------------------
-export const BAY_X = 0; // water west of this line
-export const BAY_W = 320;
-export const BEACH_W = 64; // sand between the water and the first road
+// The bay (water) and the sand strip along the west edge.
+export const WATER = { x0: 0, x1: 140 };
+export const BEACH = { x0: 140, x1: 200 };
 
-// --- the player ------------------------------------------------------------
+// Named landmarks, placed on block centres (never on a road line).
+export const LANDMARKS = [
+  { name: 'Sol Tower', x: 1600, y: 400, w: 190, h: 150, color: '#bcd8ea', district: 'palmera' },
+  { name: 'Golden Palm', x: 2400, y: 800, w: 230, h: 170, color: '#ff7fa5', district: 'neon' },
+  { name: 'Dockside Warehouse', x: 2400, y: 1600, w: 210, h: 150, color: '#7a8288', district: 'dockside' },
+  { name: 'Safehouse', x: 800, y: 2000, w: 100, h: 90, color: '#e8b04a', district: 'calle' },
+];
+
+// Places the missions point at.
+export const PLACES = {
+  marinaPickup: { x: 400, y: 1000 },
+  packagePickup: { x: 1000, y: 1600 },
+  goldenPalm: { x: 2400, y: 800 },
+  dockside: { x: 2400, y: 1600 },
+  safehouse: { x: 800, y: 2000 },
+};
+
+// Mara on foot, and her pistol.
 export const PLAYER = {
-  radius: 13,
-  walkSpeed: 170, // units per second
-  runSpeed: 285,
-  health: 100,
-  pistolDamage: 34,
-  pistolRange: 420,
-  pistolCooldown: 0.28,
-  ammoMax: 12,
-  ammoRefill: 12,
+  walk: 175, run: 265, radius: 13, hp: 100,
+  ammoMax: 12, reloadDelay: 1.4, gunRange: 540,
 };
 
-// --- cars ------------------------------------------------------------------
+// Any car: physics, size, health.
 export const CAR = {
-  width: 30,
-  length: 58,
-  accel: 420, // units per second squared
-  brake: 700,
-  reverseAccel: 260,
-  maxSpeed: 520,
-  maxReverse: 160,
-  turnRate: 2.6, // radians per second at full lock, scaled by speed
-  grip: 0.92, // how much of the velocity follows the heading
-  health: 100,
-  trafficSpeed: 150,
-  trafficCount: 26,
+  accel: 350, brake: 540, reverseAccel: 210,
+  maxSpeed: 335, maxReverse: 125, turn: 2.7, radius: 17, hp: 100,
 };
 
-// --- pedestrians -----------------------------------------------------------
-export const PED = {
-  radius: 11,
-  walkSpeed: 62,
-  fleeSpeed: 150,
-  count: 30,
-};
+export const TRAFFIC_COUNT = 22;
+export const TRAFFIC_SPEED = 96;
+export const PED_COUNT = 28;
+export const COP_FOOT_SPEED = 178;
+export const COP_BUST_DIST = 30;
+export const POLICE_CAR_SPEED = 305;
+export const HELI_SPEED = 270;
+export const WANTED_COOL = 9; // quiet seconds to lose one star
+export const KMH = 0.45; // world units per second -> km/h on the HUD
 
-// --- the police and the wanted level ---------------------------------------
-// Stars 0-5. Each star adds pursuit cars and shortens the time a crime is
-// forgotten. At 3 stars a helicopter joins with a searchlight.
-export const WANTED = {
-  maxStars: 5,
-  decayDelay: 6, // seconds clean before the stars start to fall
-  decayRate: 0.25, // stars per second once cooling down
-  carsPerStar: [0, 1, 2, 3, 4, 5],
-  footPerStar: [0, 1, 1, 2, 2, 3],
-  heliAtStars: 3,
-  bustRadius: 26, // a cop this close on foot busts Mara
-  ramDamage: 14,
-};
-
-// --- missions --------------------------------------------------------------
-export const MISSION_CASH = [800, 1400, 2200, 5000];
-export const REP_PER_MISSION = [20, 25, 30, 40];
-
-// --- the camera and the view -----------------------------------------------
-export const CAMERA = {
-  lerp: 6.5, // how fast the camera catches the player, per second
-  zoomFoot: 1.0,
-  zoomCar: 0.82, // pull back a little when driving fast
-  shakeDecay: 8,
-};
-
-// --- persistence -----------------------------------------------------------
-export const SAVE_KEY = 'solmara-save-v1';
-export const BEST_KEY = 'solmara-best-v1';
-
-// --- keys ------------------------------------------------------------------
-export const KEY = {
-  up: ['KeyW', 'ArrowUp'],
-  down: ['KeyS', 'ArrowDown'],
-  left: ['KeyA', 'ArrowLeft'],
-  right: ['KeyD', 'ArrowRight'],
-  run: ['ShiftLeft', 'ShiftRight'],
-  enter: ['KeyE'],
-  brake: ['Space'],
-  pause: ['KeyP', 'Escape'],
-  confirm: ['Enter', 'Space'],
-  mute: ['KeyM'],
-};
+export const CAR_COLORS = ['#d84a4a', '#4a7ad8', '#e8c33a', '#5ab05a', '#e8e8e8', '#3a3a3a', '#d87a2e', '#8a5ad8'];
+export const PED_COLORS = ['#3a7a4a', '#7a3a5a', '#2e6a8a', '#8a6a2e', '#5a5a5a', '#a03a3a'];
