@@ -1,13 +1,12 @@
-// Keyboard + mouse state. WASD/arrows to move and drive, E to steal or
-// enter a car, Space or click to shoot, R to reload, P/Esc to pause,
-// Enter to start. The canvas translates mouse pixels to world aim.
+// Keyboard and mouse input. Tracks held keys, a click-to-shoot aim point,
+// and edge-triggered presses (Enter to start, E to steal a car, R reload).
 export function createInput(canvas) {
-  const input = {
-    keys: new Set(),
-    mouse: { x: 0, y: 0, down: false, clicked: false },
-    // One-shot edge triggers, consumed by the game loop each frame.
-    pressed: new Set(),
-  };
+  const keys = new Set();
+  const pressed = new Set();
+  let mouseX = 0;
+  let mouseY = 0;
+  let mouseDown = false;
+  let mouseClicked = false;
 
   function keyName(e) {
     return e.key.length === 1 ? e.key.toLowerCase() : e.key;
@@ -15,55 +14,43 @@ export function createInput(canvas) {
 
   window.addEventListener('keydown', (e) => {
     const k = keyName(e);
+    if (!keys.has(k)) pressed.add(k);
+    keys.add(k);
     if ([' ', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) e.preventDefault();
-    if (!input.keys.has(k)) input.pressed.add(k);
-    input.keys.add(k);
   });
-  window.addEventListener('keyup', (e) => {
-    input.keys.delete(keyName(e));
-  });
-  window.addEventListener('blur', () => {
-    input.keys.clear();
-    input.mouse.down = false;
-  });
+  window.addEventListener('keyup', (e) => keys.delete(keyName(e)));
+  window.addEventListener('blur', () => keys.clear());
 
   canvas.addEventListener('mousemove', (e) => {
     const r = canvas.getBoundingClientRect();
-    input.mouse.x = e.clientX - r.left;
-    input.mouse.y = e.clientY - r.top;
+    mouseX = e.clientX - r.left;
+    mouseY = e.clientY - r.top;
   });
   canvas.addEventListener('mousedown', (e) => {
-    if (e.button === 0) {
-      input.mouse.down = true;
-      input.mouse.clicked = true;
-    }
+    mouseDown = true;
+    mouseClicked = true;
+    const r = canvas.getBoundingClientRect();
+    mouseX = e.clientX - r.left;
+    mouseY = e.clientY - r.top;
   });
-  window.addEventListener('mouseup', () => {
-    input.mouse.down = false;
-  });
+  window.addEventListener('mouseup', () => { mouseDown = false; });
 
-  input.axis = function axis() {
-    let x = 0;
-    let y = 0;
-    if (input.keys.has('a') || input.keys.has('ArrowLeft')) x -= 1;
-    if (input.keys.has('d') || input.keys.has('ArrowRight')) x += 1;
-    if (input.keys.has('w') || input.keys.has('ArrowUp')) y -= 1;
-    if (input.keys.has('s') || input.keys.has('ArrowDown')) y += 1;
-    return { x, y };
+  return {
+    keys,
+    get mouse() { return { x: mouseX, y: mouseY, down: mouseDown, clicked: mouseClicked }; },
+    axis() {
+      let x = 0;
+      let y = 0;
+      if (keys.has('a') || keys.has('ArrowLeft')) x -= 1;
+      if (keys.has('d') || keys.has('ArrowRight')) x += 1;
+      if (keys.has('w') || keys.has('ArrowUp')) y -= 1;
+      if (keys.has('s') || keys.has('ArrowDown')) y += 1;
+      return { x, y };
+    },
+    wasPressed(k) { return pressed.has(k); },
+    endFrame() {
+      pressed.clear();
+      mouseClicked = false;
+    },
   };
-
-  input.consumePressed = function consumePressed(k) {
-    if (input.pressed.has(k)) {
-      input.pressed.delete(k);
-      return true;
-    }
-    return false;
-  };
-
-  input.endFrame = function endFrame() {
-    input.pressed.clear();
-    input.mouse.clicked = false;
-  };
-
-  return input;
 }

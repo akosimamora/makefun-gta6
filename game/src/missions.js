@@ -1,85 +1,57 @@
-// Missions: four chained jobs from fixer Elias Kross, given to Mara
-// Voss. Each mission has an objective line for the HUD, a target
-// anchor in the city, and a cash payout. Finishing one starts the
-// next; finishing all four ends the run with a getaway rating.
+// The story: Mara Voss, a wheelwoman fresh out of the Marina, takes four
+// jobs from the fixer Elias Kross. Each mission is a target point plus a
+// condition; finishing one unlocks the next and turns its district gold
+// on the minimap.
 export const MISSIONS = [
   {
     id: 'wheels',
     title: 'Wheels',
-    giver: 'Elias Kross',
-    text: 'Drive the car to the Marina pickup',
-    detail: 'Elias needs wheels. Steal a car (E) and bring it to the Marina pickup — fast and quiet if you can.',
-    anchor: 'marinaPickup',
-    payout: 250,
+    brief: 'Kross needs a driver. Steal a car, then bring it to the Marina pickup.',
+    target: { x: 2720, y: 480 },
+    targetLabel: 'Marina pickup',
     district: 'marina',
+    needsCar: true,
+    cash: 250,
   },
   {
     id: 'vault',
     title: 'Grab the vault cash',
-    giver: 'Elias Kross',
-    text: 'Grab the vault cash at the Golden Palm',
-    detail: 'The Golden Palm casino keeps its cash downstairs. Walk into the vault marker and take it — the alarm will bring heat.',
-    anchor: 'casinoVault',
-    payout: 900,
-    district: 'palm',
-    needsOnFoot: true,
-  },
-  {
-    id: 'drop',
-    title: 'The Drop',
-    giver: 'Elias Kross',
-    text: 'Deliver the cash to Dock 9',
-    detail: 'The cash is hot. Get it to the Dock 9 drop before the cops box you in. A car helps.',
-    anchor: 'dockDrop',
-    payout: 600,
-    district: 'docks',
+    brief: 'The Golden Palm counts its take at midnight. Walk in, grab the bag, walk out.',
+    target: { x: 640, y: 1920 },
+    targetLabel: 'Golden Palm vault',
+    district: 'golden',
+    needsCar: false,
+    cash: 600,
   },
   {
     id: 'bigone',
     title: 'The Big One',
-    giver: 'Elias Kross',
-    text: 'Escape to the safehouse — lose the cops!',
-    detail: 'Last job. The whole city is looking for you. Reach the safehouse with the cops off your tail.',
-    anchor: 'safehouse',
-    payout: 1500,
-    district: 'palmera',
-    needsEscape: true,
+    brief: 'Kross set you up. The cops are coming — lose them and reach the Docks safehouse.',
+    target: { x: 2560, y: 1920 },
+    targetLabel: 'Docks safehouse',
+    district: 'docks',
+    needsCar: false,
+    cash: 1200,
+    heat: 3,
+  },
+  {
+    id: 'kross',
+    title: 'Settle with Kross',
+    brief: 'One last drive to Sol Tower. End it with Elias Kross, face to face.',
+    target: { x: 1600, y: 1200 },
+    targetLabel: 'Sol Tower',
+    district: 'downtown',
+    needsCar: false,
+    cash: 2500,
   },
 ];
 
-export function createMissionState() {
-  return {
-    index: 0,          // which mission is active (0..3), 4 = all done
-    cash: 0,           // cash earned this run
-    heatAtStart: 0,    // wanted heat when the current mission began
-    maxHeat: 0,        // highest heat reached during the current mission
-    done: false,
-    rating: null,      // CLEAN / MESSY / CHAOS once all four are done
-  };
+export function missionAt(index) {
+  return MISSIONS[index] ?? null;
 }
 
-export function currentMission(state) {
-  return state.index < MISSIONS.length ? MISSIONS[state.index] : null;
-}
-
-// Getaway rating from the heat the player carried through the run.
-export function getawayRating(maxHeatSeen) {
-  if (maxHeatSeen < 20) return 'CLEAN';
-  if (maxHeatSeen < 60) return 'MESSY';
+export function getawayLabel(wanted, damageTaken) {
+  if (wanted === 0 && damageTaken === 0) return 'CLEAN';
+  if (wanted <= 2 && damageTaken < 40) return 'MESSY';
   return 'CHAOS';
-}
-
-// Complete the active mission: pay out, mark its district REP gold,
-// advance to the next mission (or finish the run).
-export function completeMission(state, rep) {
-  const m = currentMission(state);
-  if (!m) return null;
-  state.cash += m.payout;
-  rep[m.district] = true;
-  state.index += 1;
-  state.maxHeat = 0;
-  if (state.index >= MISSIONS.length) {
-    state.done = true;
-  }
-  return m;
 }
