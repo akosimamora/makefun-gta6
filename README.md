@@ -4,22 +4,32 @@
 [![rank](https://make.fun/badge/gta6-01/akosimamora/makefun-gta6/rank.svg)](https://make.fun/bounty/gta6-01/leaderboard?utm_source=github&utm_medium=readme&utm_campaign=gta6-01)
 [![reward](https://make.fun/badge/gta6-01/akosimamora/makefun-gta6/reward.svg)](https://make.fun/bounty/gta6-01?utm_source=github&utm_medium=readme&utm_campaign=gta6-01)
 
-Solmara is a top-down open-world crime game: Mara Voss comes home to take her coastal city back from fixer Elias Kross. Walk the streets or steal a car, outrun the Solmara PD through five districts, and run four chained jobs — Wheels, The Vault, The Drop and The Big One — while the wanted level climbs from one star to five, patrol cars ram you and a helicopter pins you in its spotlight.
+Solmara is a playable open-world crime game in the browser: a coastal city of five districts that Mara Voss, wheelwoman for hire, works on foot and behind the wheel. Steal cars, outrun the police, dodge the helicopter spotlight, and run four chained jobs for the fixer Elias Kross — from a quiet courier run in Marina Bay to the Golden Palm vault heist.
 
-What is in the game: a 3200×2400 city with five named districts, AI traffic (22 cars) and pedestrians (28), foot cops and patrol cars that chase by wanted level, a helicopter from 3 stars, pistol combat with ammo and reload, district reputation that turns gold on the live minimap, getaway ratings (CLEAN / MESSY / CHAOS), a HUD with cash, wanted stars, ammo, health and a CAR speed panel, start / pause / busted / wasted / done screens, a localStorage save of best cash and jobs done, and synthesized WebAudio sounds (shots, sirens, pickups, crashes) with no audio files.
+## What is in the city
+
+- **Five districts** (Palmera Heights, Marina Bay, Golden Palm, Dockside, Sol Tower) on a 3200×2400 map with a beach and water on the west edge, a grid of avenues, and a plaza under Sol Tower.
+- **On foot and by car**: walk with WASD, press E to steal the nearest car and drive it, E again to step out. Cars accelerate, turn, and reverse; traffic cruises the avenues.
+- **Living streets**: 22 traffic cars and 28 pedestrians wander the city; running one over in a stolen car raises the heat.
+- **Wanted 0–5**: stealing, shooting, and hit-and-runs raise your stars. Foot cops chase you down, patrol cars ram, and at 3 stars a helicopter circles overhead with a spotlight. Lay low and the heat decays.
+- **Combat**: click or Space to fire the pistol (12 rounds, R reloads). Cops go down, but every shot is a star.
+- **Four chained missions**: The Courier, Dockside Pickup, The Tail, and The Big One — each with a payout, a gold marker on the map, and a getaway rating (CLEAN / MESSY / CHAOS) based on how hot you ran.
+- **HUD + minimap**: cash, district name, wanted stars, HP and ammo, the current job, a live CAR panel with speed, and a minimap where finished districts turn gold with REP.
+- **Save**: cash, jobs done, best getaway, and district REP persist in localStorage.
+- **Sound**: every effect is a WebAudio synth — no audio files.
 
 ## Controls
 
-WASD / arrows — move and drive · E — steal a car / get out · Click / Space — shoot · R — reload · P — pause · Enter — start / retry
+WASD / arrows — move or drive · Mouse — aim · Click / Space — shoot · E — steal / exit car · R — reload · P — pause · Enter — start / retry
 
 ## Run it
 
 ```sh
-mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
-# writes out/dossier.json plus the game and screenshots
+mkdir -p /tmp/solmara-out && MAKEFUN_OUTPUT_DIR=/tmp/solmara-out node main.ts
+# writes /tmp/solmara-out/dossier.json plus the game and screenshots
 ```
 
-`main.ts` runs on Node 22, standard library only, no network. It resolves paths against its own directory, never the working directory, and writes byte-identical output on every run. Open `game/index.html` in a browser to play (or `node serve.ts` for a local static server).
+`main.ts` runs on Node 22, standard library only, no network. It resolves the game and screenshots against its own directory, never the working directory, and writes byte-identical output on every run. Serve `game/` over HTTP (for example `python3 -m http.server`) and open `game/index.html` to play.
 
 ---
 

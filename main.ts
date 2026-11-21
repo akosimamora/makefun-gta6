@@ -1,32 +1,38 @@
-// Pack Solmara for judging: copy the game and its screenshots into the
-// output folder, then emit the dossier the make.fun library builds.
-import { cpSync as copyTree, mkdirSync as makeDir, readdirSync as listDir, statSync as fileInfo, writeFileSync as saveFile } from 'node:fs';
-import { dirname as dirOf, join as joinPath } from 'node:path';
+// Assemble the Solmara submission: stage the game and screenshots, then write the dossier.
+import { cpSync as duplicate, mkdirSync as ensureDir, readdirSync as readNames, statSync as statOf, writeFileSync as writeOut } from 'node:fs';
+import { dirname as parentOf, join as joinPath } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildDossier } from './vendor/makefun-game.ts';
 
-const workDir = dirOf(fileURLToPath(import.meta.url));
-const outPath = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
+const srcRoot = parentOf(fileURLToPath(import.meta.url));
+const destPath = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
 
-// Fail early with a plain message when the screenshots break the entry
-// rules, instead of letting the dossier reject the whole entry later.
-function validateImages(folder: string): void {
-  const shotDir = joinPath(workDir, folder);
-  const shotNames = listDir(shotDir).filter((name) => /\.(jpe?g|png)$/i.test(name));
-  if (shotNames.length > 4) {
-    throw new Error(`too many screenshots: ${shotNames.length} (max 4): ${shotNames.join(', ')}`);
+// Pre-flight check: at most 4 screenshots, each at most 256 KiB.
+function auditScreenshots(folder: string): string[] {
+  const imageFiles = readNames(folder).filter((name) => /\.(png|jpe?g)$/i.test(name)).sort();
+  if (imageFiles.length === 0) throw new Error(`no screenshots found in ${folder}`);
+  if (imageFiles.length > 4) throw new Error(`${imageFiles.length} screenshots in ${folder}, at most 4 allowed`);
+  for (const name of imageFiles) {
+    const byteCount = statOf(joinPath(folder, name)).size;
+    if (byteCount > 262144) throw new Error(`screenshot ${name} is ${byteCount} bytes, over the 256 KiB limit`);
   }
-  for (const name of shotNames) {
-    const fileSize = fileInfo(joinPath(shotDir, name)).size;
-    if (fileSize > 262144) {
-      throw new Error(`screenshot ${name} is ${fileSize} bytes (max 262144)`);
-    }
-  }
+  return imageFiles;
 }
 
-validateImages('screenshots');
+function main(): void {
+  ensureDir(destPath, { recursive: true });
+  duplicate(joinPath(srcRoot, 'game'), joinPath(destPath, 'game'), { recursive: true });
+  const imageDir = joinPath(srcRoot, 'screenshots');
+  const imageFiles = auditScreenshots(imageDir);
+  for (const name of imageFiles) {
+    duplicate(joinPath(imageDir, name), joinPath(destPath, name));
+  }
+  const dossier = buildDossier(srcRoot, {
+    text_max_bytes: 100000,
+    screenshots: { max: 4, max_bytes: 262144 },
+    game_path_max_bytes: 1000,
+  });
+  writeOut(joinPath(destPath, 'dossier.json'), dossier);
+}
 
-makeDir(outPath, { recursive: true });
-copyTree(joinPath(workDir, 'game'), joinPath(outPath, 'game'), { recursive: true });
-copyTree(joinPath(workDir, 'screenshots'), joinPath(outPath, 'screenshots'), { recursive: true });
-saveFile(joinPath(outPath, 'dossier.json'), buildDossier(workDir, { text_max_bytes: 163840, screenshots: { max: 4, max_bytes: 262144 } }));
+main();

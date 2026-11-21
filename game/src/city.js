@@ -1,58 +1,58 @@
-// Solmara layout: five districts on a road grid, buildings tucked inside
-// blocks, landmarks centred in their block so they never block a road.
-window.SOL = window.SOL || {};
-SOL.buildCity = function (cfg) {
-  const rng = SOL.makeRng(cfg.seed);
-  const roadsV = [];
-  const roadsH = [];
-  for (let x = cfg.roadGap; x < cfg.worldW; x += cfg.roadGap) roadsV.push(x);
-  for (let y = cfg.roadGap; y < cfg.worldH; y += cfg.roadGap) roadsH.push(y);
-  const half = cfg.roadHalf;
-  function onRoad(x, y) {
-    for (const rx of roadsV) if (Math.abs(x - rx) < half + 46) return true;
-    for (const ry of roadsH) if (Math.abs(y - ry) < half + 46) return true;
-    return false;
-  }
-  function rectHitsRoad(x, y, w, h) {
-    // A building is illegal when its rectangle overlaps any road band.
-    for (const rx of roadsV) {
-      if (x < rx + half && x + w > rx - half) return true;
-    }
-    for (const ry of roadsH) {
-      if (y < ry + half && y + h > ry - half) return true;
-    }
-    return false;
-  }
+// Solmara layout: a coastal grid city — beach and water on the west edge,
+// five districts, avenues every 320px, buildings filling the blocks.
+import { CONFIG } from './config.js';
+import { mulberry32, intRange, pick } from './random.js';
+
+export function buildCity() {
+  const rng = mulberry32(20261121);
+  const roads = [];
+  for (let x = 320; x < CONFIG.worldW; x += 320) roads.push({ x1: x, y1: 0, x2: x, y2: CONFIG.worldH, vertical: true });
+  for (let y = 320; y < CONFIG.worldH; y += 320) roads.push({ x1: 0, y1: y, x2: CONFIG.worldW, y2: y, vertical: false });
   const buildings = [];
-  for (let bx = 0; bx < cfg.worldW / cfg.roadGap; bx++) {
-    for (let by = 0; by < cfg.worldH / cfg.roadGap; by++) {
-      const x0 = bx * cfg.roadGap + half + 14;
-      const y0 = by * cfg.roadGap + half + 14;
-      const bw = cfg.roadGap - 2 * half - 28;
-      const bh = cfg.roadGap - 2 * half - 28;
-      const n = rng.int(1, 2);
+  const palette = ['#5a4a3a', '#6b5a44', '#4a5568', '#715a3a', '#54423a', '#3f4a5a'];
+  for (let bx = 0; bx < 10; bx++) {
+    for (let by = 0; by < 7; by++) {
+      if (bx === 0) continue; // beach strip, no buildings
+      const n = intRange(rng, 1, 3);
       for (let i = 0; i < n; i++) {
-        const w = rng.range(70, 130);
-        const h = rng.range(70, 120);
-        const x = rng.range(x0, x0 + bw - w);
-        const y = rng.range(y0, y0 + bh - h);
-        if (rectHitsRoad(x, y, w, h)) continue;
-        buildings.push({ x, y, w, h, tone: rng.pick(['#3a4a5a', '#46586a', '#54423a', '#3d5a4a', '#5a4a3a']) });
+        const w = intRange(rng, 90, 180);
+        const h = intRange(rng, 90, 180);
+        const x = bx * 320 + 40 + intRange(rng, 0, Math.max(0, 320 - w - 80));
+        const y = by * 320 + 40 + intRange(rng, 0, Math.max(0, 320 - h - 80));
+        buildings.push({ x, y, w, h, color: pick(rng, palette), roof: rng() < 0.3 });
       }
     }
   }
-  const landmarks = [
-    { id: 'soltower', name: 'Sol Tower', x: 525, y: 525, w: 150, h: 150, color: '#c9a227' },
-    { id: 'cityhall', name: 'City Hall', x: 2115, y: 540, w: 170, h: 120, color: '#7d8aa0' },
-    { id: 'goldenpalm', name: 'Golden Palm', x: 890, y: 1730, w: 220, h: 140, color: '#d4af37' },
-    { id: 'marina', name: 'Marina Pier', x: 1300, y: 170, w: 200, h: 60, color: '#4aa3c7' },
-    { id: 'safehouse', name: 'Safehouse', x: 2540, y: 2150, w: 120, h: 100, color: '#7fb069' },
-  ];
-  return { roadsV, roadsH, buildings, landmarks, onRoad };
-};
-SOL.districtAt = function (cfg, x, y) {
-  for (const d of cfg.districts) {
+  // Landmarks: Sol Tower at the plaza, the Golden Palm casino, the marina pier.
+  buildings.push({ x: 1960, y: 1380, w: 220, h: 220, color: '#2c3e6b', roof: true, landmark: 'Sol Tower' });
+  buildings.push({ x: 2560, y: 300, w: 260, h: 160, color: '#8a6d1f', roof: true, landmark: 'Golden Palm' });
+  buildings.push({ x: 1500, y: 420, w: 200, h: 120, color: '#1f6b5e', roof: false, landmark: 'Marina' });
+  return {
+    roads,
+    buildings,
+    beach: { x: 0, y: 0, w: 200, h: CONFIG.worldH },
+    water: { x: 0, y: 0, w: 90, h: CONFIG.worldH },
+    plaza: { x: 1900, y: 1320, w: 340, h: 340 },
+    spawn: { x: 600, y: 900 },
+    carSpawns: [
+      { x: 700, y: 1027 }, { x: 830, y: 1027 }, { x: 1020, y: 1347 },
+      { x: 1500, y: 700 }, { x: 2100, y: 1667 }, { x: 2600, y: 1027 },
+      { x: 1100, y: 1987 }, { x: 2400, y: 1987 },
+    ],
+  };
+}
+
+export function districtAt(x, y) {
+  for (const d of CONFIG.districts) {
     if (x >= d.x && x < d.x + d.w && y >= d.y && y < d.y + d.h) return d;
   }
-  return cfg.districts[0];
-};
+  return CONFIG.districts[0];
+}
+
+export function onRoad(city, x, y) {
+  for (const r of city.roads) {
+    if (r.vertical && Math.abs(x - r.x1) < 46) return true;
+    if (!r.vertical && Math.abs(y - r.y1) < 46) return true;
+  }
+  return false;
+}

@@ -1,44 +1,80 @@
-// Deterministic scene setups for the four screenshots. Each one puts the
-// player, the police and the mission into a fixed, readable state.
-window.SOL = window.SOL || {};
-SOL.stageShot = function (w, name) {
-  const p = w.player, cfg = w.cfg;
-  w.mode = 'playing';
-  w.messageMs = 0; w.mess = 0;
-  // Clear roaming cops; each scene places its own.
-  w.cops.length = 0;
+// Screenshot staging: freeze a scene at a chosen moment so each capture
+// shows a different system — chase, city on foot, heist, title screen.
+import { CONFIG } from './config.js';
+
+export function stageScene(world, name) {
+  const p = world.player;
+  world.frozen = false;
+  world.cops = [];
+  world.bullets = [];
+  world.heli.active = false;
+  world.wanted = 0;
+  world.wantedPeak = 0;
   if (name === 'chase') {
-    // Cover: red car mid-chase at an intersection, heli overhead, 3 stars.
-    p.onFoot = false; p.carId = 0; p.speed = 168; p.angle = Math.PI / 2;
-    p.x = 1200; p.y = 1200; p.wanted = 3; p.hp = 100; p.ammo = 12;
-    const car = w.cars[0];
-    car.traffic = false; car.parked = false; car.color = '#c0392b';
-    car.x = p.x; car.y = p.y; car.angle = p.angle; car.speed = p.speed; car.hp = 88;
-    w.cars[1].traffic = false; w.cars[1].x = 1200; w.cars[1].y = 1060; w.cars[1].angle = Math.PI / 2; w.cars[1].color = '#0f172a';
-    w.cars[2].traffic = false; w.cars[2].x = 1140; w.cars[2].y = 1330; w.cars[2].angle = Math.PI / 2; w.cars[2].color = '#0f172a';
-    w.cops.push({ x: 1200, y: 1060, angle: Math.PI / 2, speed: 0, hp: 100, car: true });
-    w.cops.push({ x: 1140, y: 1330, angle: Math.PI / 2, speed: 0, hp: 100, car: true });
-    w.heli.active = true; w.heli.x = 1200; w.heli.y = 1150;
-    w.missionIndex = 3;
-    w.cam.x = p.x; w.cam.y = p.y;
+    // Mara mid-escape at the Sol Tower plaza intersection, heli overhead.
+    p.onFoot = false;
+    p.car = world.cars[2];
+    p.car.driver = true;
+    p.car.parked = false;
+    p.car.x = 2070;
+    p.car.y = 1490;
+    p.car.angle = Math.PI / 4;
+    p.car.speed = 420;
+    p.x = p.car.x;
+    p.y = p.car.y;
+    p.angle = p.car.angle;
+    p.speed = 151;
+    world.wanted = 3;
+    world.wantedPeak = 3;
+    world.cops = [
+      { kind: 'car', x: 1980, y: 1420, angle: Math.PI / 4, speed: 380, color: '#2c3e50' },
+      { kind: 'car', x: 2160, y: 1580, angle: -Math.PI * 0.75, speed: 360, color: '#2c3e50' },
+      { kind: 'foot', x: 2010, y: 1560, speed: 210, hp: 60 },
+    ];
+    world.heli.active = true;
+    world.heli.x = p.x + 60;
+    world.heli.y = p.y - 170;
+    world.heli.angle = 0.6;
+    world.mission = { id: 'bigone', title: 'The Big One', giver: 'Elias Kross', text: 'The Golden Palm vault. In, out, and gone before the heli arrives.', target: { x: 2690, y: 380, district: 'golden' }, payout: 9000, needsCar: false };
+    world.message = 'Elias Kross: The Golden Palm vault. In, out, and gone before the heli arrives.';
+    world.messageTimer = 6;
+    world.frozen = true;
   } else if (name === 'city') {
-    // On foot in Palmera Heights, traffic and pedestrians around.
-    p.onFoot = true; p.carId = -1; p.speed = 0; p.angle = -Math.PI / 2;
-    p.x = 600; p.y = 900; p.wanted = 0; p.hp = 100; p.ammo = 12;
-    w.heli.active = false;
-    w.missionIndex = 0;
-    w.cam.x = p.x; w.cam.y = p.y;
+    // Mara on foot in Palmera Heights, traffic and pedestrians around.
+    p.onFoot = true;
+    p.car = null;
+    p.x = 600;
+    p.y = 900;
+    p.angle = -Math.PI / 2;
+    p.hp = 100;
+    p.ammo = 12;
+    world.mission = { id: 'courier', title: 'The Courier', giver: 'Elias Kross', text: 'Drive the package to Marina Bay. No questions, no stops.', target: { x: 1560, y: 470, district: 'marina' }, payout: 1200, needsCar: true };
+    world.message = 'Elias Kross: Drive the package to Marina Bay. No questions, no stops.';
+    world.messageTimer = 6;
+    world.frozen = true;
   } else if (name === 'heist') {
-    // At the Golden Palm vault marker, two foot cops closing in, 2 stars.
-    p.onFoot = true; p.carId = -1; p.speed = 0; p.angle = Math.PI / 2;
-    p.x = 1000; p.y = 1650; p.wanted = 2; p.hp = 88; p.ammo = 10;
-    w.heli.active = false;
-    w.cops.push({ x: 880, y: 1560, angle: 0.6, speed: 0, hp: 100, car: false });
-    w.cops.push({ x: 1120, y: 1540, angle: 2.4, speed: 0, hp: 100, car: false });
-    w.missionIndex = 1;
-    w.cam.x = p.x; w.cam.y = p.y;
-  } else if (name === 'start') {
-    w.mode = 'title';
+    // Outside the Golden Palm vault, two foot cops closing in.
+    p.onFoot = true;
+    p.car = null;
+    p.x = 2690;
+    p.y = 480;
+    p.angle = -Math.PI / 2;
+    p.hp = 88;
+    p.ammo = 10;
+    world.wanted = 2;
+    world.wantedPeak = 2;
+    world.cops = [
+      { kind: 'foot', x: 2600, y: 560, speed: 210, hp: 60 },
+      { kind: 'foot', x: 2770, y: 580, speed: 210, hp: 60 },
+    ];
+    world.mission = { id: 'bigone', title: 'The Big One', giver: 'Elias Kross', text: 'The Golden Palm vault. In, out, and gone before the heli arrives.', target: { x: 2690, y: 380, district: 'golden' }, payout: 9000, needsCar: false };
+    world.message = 'Vault beacon live — grab the cash and run.';
+    world.messageTimer = 6;
+    world.frozen = true;
   }
-  return w;
-};
+  // 'start' needs no world change: the title overlay is drawn by the loop.
+}
+
+export function unfreeze(world) {
+  world.frozen = false;
+}

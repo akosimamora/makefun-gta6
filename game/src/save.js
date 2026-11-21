@@ -1,16 +1,26 @@
-// Best cash + jobs done, kept in localStorage between sessions.
-window.SOL = window.SOL || {};
-SOL.save = {
-  key: 'solmara-save-v1',
-  load() {
-    try {
-      const raw = window.localStorage.getItem(this.key);
-      if (!raw) return { bestCash: 0, jobsDone: 0 };
-      const d = JSON.parse(raw);
-      return { bestCash: d.bestCash | 0, jobsDone: d.jobsDone | 0 };
-    } catch (e) { return { bestCash: 0, jobsDone: 0 }; }
-  },
-  store(bestCash, jobsDone) {
-    try { window.localStorage.setItem(this.key, JSON.stringify({ bestCash, jobsDone })); } catch (e) { /* private mode */ }
-  },
-};
+// localStorage save: cash, jobs done, best getaway, district REP.
+const KEY = 'solmara-save-v1';
+
+export function loadSave() {
+  try {
+    const raw = window.localStorage.getItem(KEY);
+    if (!raw) return null;
+    const s = JSON.parse(raw);
+    if (typeof s.cash !== 'number') return null;
+    return s;
+  } catch (_e) {
+    return null;
+  }
+}
+
+export function storeSave(save) {
+  try {
+    window.localStorage.setItem(KEY, JSON.stringify(save));
+  } catch (_e) {
+    // storage full or blocked: the session just does not persist
+  }
+}
+
+export function freshSave() {
+  return { cash: 0, jobsDone: 0, bestGetaway: '', rep: {} };
+}

@@ -1,29 +1,60 @@
-// Keyboard + mouse, with edge-triggered presses the game loop consumes.
-window.SOL = window.SOL || {};
-SOL.input = {
-  keys: {},
-  pressed: {},
-  mouse: { x: 0, y: 0, down: false, clicked: false },
-  attach(canvas) {
-    window.addEventListener('keydown', (e) => {
-      if (!this.keys[e.code]) this.pressed[e.code] = true;
-      this.keys[e.code] = true;
+// Keyboard + mouse state, shared by the loop and the screenshot stager.
+export class Input {
+  constructor() {
+    this.keys = new Set();
+    this.pressedQueue = new Set();
+    this.mouseX = 0;
+    this.mouseY = 0;
+    this.mouseDown = false;
+    this.clicked = false;
+    this._down = (e) => {
+      this.keys.add(e.code);
+      this.pressedQueue.add(e.code);
       if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) e.preventDefault();
-    });
-    window.addEventListener('keyup', (e) => { this.keys[e.code] = false; });
-    canvas.addEventListener('mousemove', (e) => {
-      const r = canvas.getBoundingClientRect();
-      this.mouse.x = e.clientX - r.left;
-      this.mouse.y = e.clientY - r.top;
-    });
-    canvas.addEventListener('mousedown', (e) => {
-      if (e.button === 0) { this.mouse.down = true; this.mouse.clicked = true; }
-    });
-    window.addEventListener('mouseup', () => { this.mouse.down = false; });
-    window.addEventListener('blur', () => { this.keys = {}; this.mouse.down = false; });
-  },
-  down(code) { return !!this.keys[code]; },
-  hit(code) { const v = !!this.pressed[code]; delete this.pressed[code]; return v; },
-  click() { const v = this.mouse.clicked; this.mouse.clicked = false; return v; },
-  endFrame() { this.pressed = {}; this.mouse.clicked = false; },
-};
+    };
+    this._up = (e) => this.keys.delete(e.code);
+    this._move = (e) => {
+      const r = e.target.getBoundingClientRect();
+      this.mouseX = e.clientX - r.left;
+      this.mouseY = e.clientY - r.top;
+    };
+    this._press = (e) => {
+      this._move(e);
+      this.mouseDown = true;
+      this.clicked = true;
+    };
+    this._release = () => { this.mouseDown = false; };
+  }
+  attach(el) {
+    window.addEventListener('keydown', this._down);
+    window.addEventListener('keyup', this._up);
+    el.addEventListener('mousemove', this._move);
+    el.addEventListener('mousedown', this._press);
+    window.addEventListener('mouseup', this._release);
+    el.addEventListener('contextmenu', (e) => e.preventDefault());
+  }
+  axis() {
+    let x = 0;
+    let y = 0;
+    if (this.keys.has('KeyA') || this.keys.has('ArrowLeft')) x -= 1;
+    if (this.keys.has('KeyD') || this.keys.has('ArrowRight')) x += 1;
+    if (this.keys.has('KeyW') || this.keys.has('ArrowUp')) y -= 1;
+    if (this.keys.has('KeyS') || this.keys.has('ArrowDown')) y += 1;
+    return { x, y };
+  }
+  pressed(code) {
+    return this.keys.has(code);
+  }
+  // Edge trigger: true exactly once per physical key press, even if the
+  // press is shorter than one frame.
+  consumePressed(code) {
+    const hit = this.pressedQueue.has(code);
+    this.pressedQueue.delete(code);
+    return hit;
+  }
+  consumeClick() {
+    const c = this.clicked;
+    this.clicked = false;
+    return c;
+  }
+}
